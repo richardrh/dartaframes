@@ -1,0 +1,24 @@
+/* ELF version script. This is groundwork only; it is not wired into Cargo yet. */
+DARTAFRAMES_POLARS_FFI_2 {
+  global:
+    df_abi_version;
+    df_invoke;
+    df_buffer_free;
+    df_handle_release;
+    df_handle_token_new;
+    df_handle_token_release;
+    df_arrow_array_new;
+    df_arrow_array_delete;
+    df_arrow_schema_new;
+    df_arrow_schema_delete;
+    df_arrow_stream_new;
+    df_arrow_stream_delete;
+    df_series_export_arrow;
+    df_series_import_arrow;
+    df_frame_export_arrow;
+    df_frame_import_arrow;
+    df_frame_export_arrow_stream;
+    df_frame_import_arrow_stream;
+  local:
+    *;
+};

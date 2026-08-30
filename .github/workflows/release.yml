@@ -1,0 +1,137 @@
+name: Prepare GitHub release
+
+# Manual until checksum promotion has been reviewed. This workflow never
+# publishes the GitHub draft or the package to pub.dev.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable package version
+        required: true
+        type: string
+      release_tag:
+        description: Existing tag and draft release, exactly v<version>
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  verify:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 30
+    steps:
+      - name: Check out the exact release tag
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+          persist-credentials: false
+      - name: Validate clean version, tag, and promoted native pins
+        env:
+          VERSION: ${{ inputs.version }}
+          TAG: ${{ inputs.release_tag }}
+        run: python3 .github/scripts/validate_release.py "$VERSION" --tag "$TAG" --require-promoted
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
+        with:
+          sdk: 3.13.0
+      - name: Resolve locked dependencies
+        run: dart pub get --enforce-lockfile
+      - name: Check Dart formatting
+        run: dart format --output=none --set-exit-if-changed .
+      - name: Analyze Dart
+        run: dart analyze --fatal-infos
+      - name: Run distribution tests
+        run: python3 -m unittest discover -s tool -p 'test_native_*.py'
+      - name: Validate publishable Dart package
+        run: dart pub publish --dry-run
+      - name: Require an existing draft release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          draft="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
+          [[ "$draft" == "true" ]] || { echo "$TAG is not a draft release" >&2; exit 1; }
+      - name: Download native release assets
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          mkdir release-assets
+          gh release download "$TAG" --repo "$GITHUB_REPOSITORY" --dir release-assets
+      - name: Verify promoted metadata and every native asset
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+        run: |
+          set -euo pipefail
+          python3 - "$VERSION" <<'PY'
+          import json
+          import sys
+          from pathlib import Path
+
+          version = sys.argv[1]
+          root = Path("release-assets")
+          index = json.loads((root / "native-assets.json").read_text(encoding="utf-8"))
+          if index.get("version") != version or index.get("package") != "dartaframes_polars_ffi":
+              raise SystemExit("release index has the wrong version or native package")
+          records = index.get("artifacts")
+          if not isinstance(records, list) or len(records) != 5:
+              raise SystemExit("release index must contain exactly five native targets")
+          expected = {"LICENSE", "THIRD_PARTY_LICENSES.txt", "native-assets.json",
+                      "SHA256SUMS", "native_release_metadata.dart"}
+          for record in records:
+              expected.update({record["archive"], record["archive"] + ".sha256",
+                               record["raw_asset"], record["raw_asset"] + ".sha256"})
+          actual = {path.name for path in root.iterdir() if path.is_file()}
+          if actual != expected:
+              raise SystemExit(f"release asset set mismatch; missing={sorted(expected-actual)}, extra={sorted(actual-expected)}")
+          PY
+          mkdir regenerated
+          python3 tool/native_distribution.py index \
+            --directory release-assets --version "$VERSION" --output-dir regenerated
+          cmp release-assets/native-assets.json regenerated/native-assets.json
+          cmp release-assets/SHA256SUMS regenerated/SHA256SUMS
+          python3 tool/native_distribution.py generate-dart \
+            --index release-assets/native-assets.json \
+            --output regenerated/native_release_metadata.dart
+          cmp release-assets/native_release_metadata.dart regenerated/native_release_metadata.dart
+          cmp lib/src/native_release_metadata.dart regenerated/native_release_metadata.dart
+      - name: Upload verified release evidence
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: verified-release-${{ inputs.version }}
+          path: |
+            release-assets/native-assets.json
+            release-assets/SHA256SUMS
+            release-assets/native_release_metadata.dart
+          if-no-files-found: error
+          retention-days: 30
+
+  update-draft:
+    needs: verify
+    runs-on: ubuntu-24.04
+    timeout-minutes: 5
+    permissions:
+      contents: write
+    steps:
+      - name: Update draft release without publishing it
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          draft="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
+          [[ "$draft" == "true" ]] || { echo "$TAG is no longer a draft" >&2; exit 1; }
+          gh release edit "$TAG" --repo "$GITHUB_REPOSITORY" --draft --title "$TAG" \
+            --notes "Native assets and promoted Dart metadata verified by workflow run $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID. Review this draft manually before publication."

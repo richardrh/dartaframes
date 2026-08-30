@@ -1,0 +1,27 @@
+name: dartaframes_polars
+description: Direct native-handle Polars expressions and frames for Dart.
+version: 0.1.0-dev.1
+repository: https://github.com/richardrh/dartframes
+issue_tracker: https://github.com/richardrh/dartframes/issues
+topics:
+  - dataframe
+  - polars
+  - data-analysis
+  - ffi
+  - native-assets
+platforms:
+  linux:
+  macos:
+  windows:
+environment:
+  sdk: ^3.13.0
+dependencies:
+  code_assets: ^1.2.1
+  crypto: ^3.0.6
+  ffi: ^2.1.4
+  hooks: ^2.1.0
+dev_dependencies:
+  analyzer: 14.1.0
+  args: 2.7.0
+  coverage: 1.15.1
+  test: 1.31.2

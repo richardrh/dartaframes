@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "functions": {
+    "lib/src/scalar.dart::Scalar.fromArrow/2": 161.0,
+    "lib/src/native_asset_invoker.dart::_NativeAssetInvoker.invokeSync/1": 132.0,
+    "lib/src/native.dart::_NativeInvoker.invokeSync/1": 132.0,
+    "lib/src/arrow/array.dart::validateArrowValue/3": 59.0,
+    "lib/src/dtype.dart::DTypeCapabilities.supports/1": 56.0,
+    "lib/src/scalar.dart::Scalar.fromJson/1": 51.0,
+    "lib/src/arrow/type.dart::ArrowDataType._fromJson/1": 40.0,
+    "lib/src/dtype.dart::UnknownType.fromJson/1": 33.0
+  }
+}

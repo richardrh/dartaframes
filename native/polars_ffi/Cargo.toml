@@ -1,0 +1,28 @@
+[package]
+name = "dartaframes_polars_ffi"
+version = "0.1.0"
+edition = "2021"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+base64 = "0.22"
+parking_lot = "0.12"
+polars = { version = "=0.55.2", default-features = false, features = [
+  "lazy", "csv", "parquet", "dtype-full", "dtype-extension", "object",
+  "strings", "regex", "temporal", "timezones", "true_div", "bitwise",
+  "product", "cross_join", "semi_anti_join", "asof_join", "is_in", "cum_agg",
+  "abs", "round_series", "approx_unique", "diff", "ewma", "interpolate",
+  "interpolate_by", "log", "mode", "moment", "pct_change", "propagate_nans",
+  "rank", "rolling_window", "trigonometry", "iejoin", "dynamic_group_by",
+  "diagonal_concat", "pivot", "sql", "string_pad", "binary_encoding",
+  "offset_by", "json", "ipc", "ipc_streaming", "cse", "dot_diagram"
+] }
+polars-utils = "=0.55.2"
+polars-arrow = "=0.55.2"
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+tempfile = "3"
+thiserror = "2"

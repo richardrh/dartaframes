@@ -1,0 +1,19 @@
+# macOS exported-symbol list. Mach-O C symbols have a leading underscore.
+_df_abi_version
+_df_invoke
+_df_buffer_free
+_df_handle_release
+_df_handle_token_new
+_df_handle_token_release
+_df_arrow_array_new
+_df_arrow_array_delete
+_df_arrow_schema_new
+_df_arrow_schema_delete
+_df_arrow_stream_new
+_df_arrow_stream_delete
+_df_series_export_arrow
+_df_series_import_arrow
+_df_frame_export_arrow
+_df_frame_import_arrow
+_df_frame_export_arrow_stream
+_df_frame_import_arrow_stream

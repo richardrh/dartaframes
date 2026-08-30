@@ -1,0 +1,50 @@
+# Dart and test outputs
+.dart_tool/
+.packages
+.pub/
+build/
+coverage/
+test-results/
+*.log
+
+# Rust build outputs and native binaries
+target/
+*.dylib
+*.so
+*.dll
+*.a
+*.lib
+*.rlib
+*.pdb
+
+# Python environments, caches, and test outputs
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Benchmark-generated data and reports
+/benchmark/io_comparison/fixtures/
+/benchmark/io_comparison/results/
+/benchmark/io_comparison/build/
+/benchmark/io_comparison/.venv/
+/benchmark/io_comparison/__pycache__/
+
+# Release outputs
+dist/
+*.tar.gz
+*.zip
+
+# Editors and operating systems
+.DS_Store
+.idea/
+.vscode/
+*.iml
+*.swp
+*.swo
+*~

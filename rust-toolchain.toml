@@ -1,0 +1,4 @@
+[toolchain]
+# Keep release builders on an exact compiler. Update deliberately with Cargo.lock.
+channel = "1.98.0"
+profile = "minimal"

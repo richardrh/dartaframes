@@ -1,0 +1,85 @@
+name: CI
+
+on:
+  push:
+    branches: [master]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  quality:
+    name: Dart, Python, and Rust formatting
+    runs-on: ubuntu-24.04
+    timeout-minutes: 25
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
+        with:
+          sdk: 3.13.0
+      - name: Resolve locked dependencies
+        run: dart pub get --enforce-lockfile
+      - name: Check Dart formatting
+        run: dart format --output=none --set-exit-if-changed .
+      - name: Analyze Dart
+        run: dart analyze --fatal-infos
+      - name: Run package Dart tests with coverage
+        run: dart test --coverage=coverage
+      - name: Test CRAP gate tooling
+        run: dart test tool/crap_gate_test.dart
+      - name: Convert VM coverage to LCOV
+        run: >-
+          dart run coverage:format_coverage
+          --lcov
+          --in=coverage
+          --out=coverage/lcov.info
+          --packages=.dart_tool/package_config.json
+          --report-on=lib
+      - name: Enforce CRAP baseline ratchet
+        run: dart run tool/crap_gate.dart --threshold=30 --baseline=tool/crap_baseline.json
+      - name: Run native tooling Python tests
+        run: python3 -m unittest discover -s tool -p 'test_native_*.py'
+      # The minimal Rust profile excludes rustfmt. Installing this component
+      # and running cargo fmt does not compile the Polars crate.
+      - name: Install pinned Rust formatter
+        run: rustup toolchain install 1.98.0 --profile minimal --component rustfmt --no-self-update
+      - name: Check Rust formatting (no build)
+        run: cargo +1.98.0 fmt --all -- --check
+      - name: Validate publishable Dart package
+        run: dart pub publish --dry-run
+      - name: Add CRAP report to job summary
+        if: always()
+        shell: bash
+        run: |
+          if [[ -f coverage/crap.md ]]; then
+            cat coverage/crap.md >> "$GITHUB_STEP_SUMMARY"
+          fi
+      - name: Upload coverage and CRAP reports
+        if: always()
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: coverage-and-crap
+          path: |
+            coverage/lcov.info
+            coverage/crap.json
+            coverage/crap.md
+          if-no-files-found: warn
+          retention-days: 14
+      # Public repositories can upload tokenlessly. Codecov or fork-context
+      # failures must not fail the repository-owned quality gate.
+      - name: Upload LCOV to Codecov
+        if: always()
+        uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+        with:
+          files: coverage/lcov.info
+          fail_ci_if_error: false
+          disable_search: true

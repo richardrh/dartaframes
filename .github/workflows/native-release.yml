@@ -1,0 +1,329 @@
+name: Native release assets
+
+# Manual only: publishing a GitHub Release must never start an expensive build
+# or attempt to add assets to an already-public release.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable package/native version (for example, 0.1.0)
+        required: true
+        type: string
+      upload_to_draft:
+        description: Create or upload to the explicitly named draft release
+        required: true
+        default: false
+        type: boolean
+      release_tag:
+        description: Exact draft release tag (v<version>); required for upload
+        required: false
+        type: string
+      source_run_id:
+        description: Reviewed non-uploading workflow run; required for upload
+        required: false
+        type: string
+
+permissions:
+  actions: read
+  contents: read
+
+concurrency:
+  group: release-${{ inputs.release_tag || format('native-build-{0}', inputs.version) }}
+  cancel-in-progress: false
+
+env:
+  CARGO_INCREMENTAL: "0"
+  CARGO_TERM_COLOR: always
+  RUST_TOOLCHAIN: "1.98.0"
+
+jobs:
+  prepare:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    outputs:
+      version: ${{ steps.release.outputs.version }}
+      tag: ${{ steps.release.outputs.tag }}
+      source_run_id: ${{ steps.release.outputs.source_run_id }}
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - name: Validate tooling, versions, and release inputs
+        id: release
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          RELEASE_TAG: ${{ inputs.release_tag }}
+          UPLOAD: ${{ inputs.upload_to_draft }}
+          SOURCE_RUN_ID: ${{ inputs.source_run_id }}
+          DISPATCH_REF: ${{ github.ref }}
+          DISPATCH_SHA: ${{ github.sha }}
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          python3 -m unittest discover -s tool -p 'test_native_*.py'
+          python3 .github/scripts/validate_release.py "$VERSION"
+          if [[ "$UPLOAD" == "true" ]]; then
+            if [[ -z "$RELEASE_TAG" ]]; then
+              echo "release_tag is required when upload_to_draft is true" >&2
+              exit 1
+            fi
+            if [[ ! "$SOURCE_RUN_ID" =~ ^[1-9][0-9]*$ ]]; then
+              echo "source_run_id is required when upload_to_draft is true" >&2
+              exit 1
+            fi
+            python3 .github/scripts/validate_release.py "$VERSION" --tag "$RELEASE_TAG"
+            [[ "$DISPATCH_REF" == "refs/tags/v$VERSION" ]] || {
+              echo "upload dispatch must run from exact ref refs/tags/v$VERSION" >&2
+              exit 1
+            }
+            git show-ref --verify --quiet "refs/tags/$RELEASE_TAG" || {
+              echo "tag $RELEASE_TAG does not exist in the checked-out repository" >&2
+              exit 1
+            }
+            tag_commit="$(git rev-parse "refs/tags/$RELEASE_TAG^{}")"
+            head_commit="$(git rev-parse HEAD)"
+            [[ "$tag_commit" == "$head_commit" && "$head_commit" == "$DISPATCH_SHA" ]] || {
+              echo "peeled tag, checked-out HEAD, and github.sha must identify one commit" >&2
+              exit 1
+            }
+            python3 .github/scripts/validate_release.py "$VERSION" --tag "$RELEASE_TAG" --require-promoted
+            run_api="repos/$GITHUB_REPOSITORY/actions/runs/$SOURCE_RUN_ID"
+            [[ "$(gh api "$run_api" --jq .conclusion)" == "success" ]] || {
+              echo "source workflow run did not complete successfully" >&2
+              exit 1
+            }
+            [[ "$(gh api "$run_api" --jq .event)" == "workflow_dispatch" ]] || {
+              echo "source workflow run was not manually dispatched" >&2
+              exit 1
+            }
+            workflow_path="$(gh api "$run_api" --jq .path)"
+            [[ "$workflow_path" == .github/workflows/native-release.yml* ]] || {
+              echo "source run used the wrong workflow: $workflow_path" >&2
+              exit 1
+            }
+            source_sha="$(gh api "$run_api" --jq .head_sha)"
+            git merge-base --is-ancestor "$source_sha" HEAD || {
+              echo "source workflow commit is not an ancestor of the release tag" >&2
+              exit 1
+            }
+            changed="$(git diff --name-only "$source_sha" HEAD)"
+            [[ "$changed" == "lib/src/native_release_metadata.dart" ]] || {
+              echo "only native release metadata may differ from the reviewed source run" >&2
+              printf 'changed files:\n%s\n' "$changed" >&2
+              exit 1
+            }
+          else
+            if [[ -n "$RELEASE_TAG" || -n "$SOURCE_RUN_ID" ]]; then
+              echo "release_tag and source_run_id must be empty for a build-only run" >&2
+              exit 1
+            fi
+            [[ -s LICENSE && -s native/THIRD_PARTY_LICENSES.txt ]] || {
+              echo "reviewed project and third-party license files are required" >&2
+              exit 1
+            }
+          fi
+          printf 'version=%s\ntag=%s\nsource_run_id=%s\n' \
+            "$VERSION" "$RELEASE_TAG" "$SOURCE_RUN_ID" >> "$GITHUB_OUTPUT"
+
+  build:
+    if: ${{ !inputs.upload_to_draft }}
+    needs: prepare
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - target: aarch64-apple-darwin
+            runner: macos-14
+            library: target/aarch64-apple-darwin/release/libdartaframes_polars_ffi.dylib
+          - target: x86_64-apple-darwin
+            runner: macos-15-intel
+            library: target/x86_64-apple-darwin/release/libdartaframes_polars_ffi.dylib
+          - target: aarch64-unknown-linux-gnu
+            runner: ubuntu-24.04-arm
+            library: target/aarch64-unknown-linux-gnu/release/libdartaframes_polars_ffi.so
+          - target: x86_64-unknown-linux-gnu
+            runner: ubuntu-24.04
+            library: target/x86_64-unknown-linux-gnu/release/libdartaframes_polars_ffi.so
+          - target: x86_64-pc-windows-msvc
+            runner: windows-2025
+            library: target/x86_64-pc-windows-msvc/release/dartaframes_polars_ffi.dll
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 180
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065 # v5.6.0
+        with:
+          python-version: "3.12"
+      - name: Install exact Rust toolchain and host target
+        shell: bash
+        run: |
+          set -euo pipefail
+          rustup set auto-self-update disable
+          rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal --no-self-update
+          rustup target add '${{ matrix.target }}' --toolchain "$RUST_TOOLCHAIN"
+          rustup component add llvm-tools-preview --toolchain "$RUST_TOOLCHAIN"
+          rustc "+$RUST_TOOLCHAIN" --version --verbose
+      - name: Test locked native workspace
+        shell: bash
+        run: cargo "+$RUST_TOOLCHAIN" test --locked --workspace --target '${{ matrix.target }}'
+      - name: Build locked release library
+        shell: bash
+        run: cargo "+$RUST_TOOLCHAIN" build --locked --release --package dartaframes_polars_ffi --target '${{ matrix.target }}'
+      - name: Verify every advertised native ABI export
+        shell: bash
+        env:
+          LIBRARY_PATH: ${{ matrix.library }}
+        run: |
+          set -euo pipefail
+          sysroot="$(rustc "+$RUST_TOOLCHAIN" --print sysroot)"
+          host="$(rustc "+$RUST_TOOLCHAIN" -vV | python3 -c 'import sys; print(next(line.split(": ", 1)[1] for line in sys.stdin if line.startswith("host: ")))')"
+          llvm_nm="$sysroot/lib/rustlib/$host/bin/llvm-nm"
+          [[ -x "$llvm_nm" || -x "$llvm_nm.exe" ]] || { echo "llvm-nm not found" >&2; exit 1; }
+          [[ -x "$llvm_nm" ]] || llvm_nm="$llvm_nm.exe"
+          "$llvm_nm" --defined-only --extern-only "$LIBRARY_PATH" > defined-exports.txt
+          python3 tool/native_exports.py --listing defined-exports.txt
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
+        with:
+          sdk: 3.13.0
+      - name: Resolve locked Dart dependencies
+        shell: bash
+        run: dart pub get --enforce-lockfile
+      - name: Export matrix library path
+        shell: bash
+        env:
+          LIBRARY_PATH: ${{ matrix.library }}
+        run: |
+          set -euo pipefail
+          python - "$LIBRARY_PATH" "$GITHUB_ENV" <<'PY'
+          from pathlib import Path
+          import sys
+          library = Path(sys.argv[1]).resolve(strict=True)
+          with open(sys.argv[2], "a", encoding="utf-8") as environment:
+              environment.write(f"DARTAFRAMES_NATIVE_LIBRARY={library}\n")
+          PY
+      - name: Run native Dart E2E
+        shell: bash
+        run: >-
+          dart test --reporter expanded
+          test/native_integration_test.dart
+          test/io_relational_native_test.dart
+      - name: Package and verify raw and archive assets
+        shell: bash
+        env:
+          LIBRARY_PATH: ${{ matrix.library }}
+          TARGET: ${{ matrix.target }}
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          archive="$(python tool/native_distribution.py package \
+            --library "$LIBRARY_PATH" \
+            --target "$TARGET" \
+            --version "$VERSION" \
+            --license LICENSE \
+            --third-party-licenses native/THIRD_PARTY_LICENSES.txt \
+            --output-dir dist)"
+          python tool/native_distribution.py verify --archive "$archive"
+      - name: Upload matrix assets
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: native-${{ matrix.target }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+  verify-release-set:
+    if: ${{ always() && needs.prepare.result == 'success' && (needs.build.result == 'success' || inputs.upload_to_draft) }}
+    needs: [prepare, build]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - name: Check out source
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          persist-credentials: false
+      - name: Download matrix assets
+        if: ${{ !inputs.upload_to_draft }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          pattern: native-*
+          path: dist
+          merge-multiple: true
+      - name: Download reviewed release set
+        if: ${{ inputs.upload_to_draft }}
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: native-release-${{ needs.prepare.outputs.version }}
+          path: dist
+          github-token: ${{ github.token }}
+          run-id: ${{ needs.prepare.outputs.source_run_id }}
+      - name: Verify complete target set and generate metadata
+        shell: bash
+        env:
+          VERSION: ${{ needs.prepare.outputs.version }}
+        run: |
+          set -euo pipefail
+          if [[ '${{ inputs.upload_to_draft }}' != 'true' ]]; then
+            cp LICENSE native/THIRD_PARTY_LICENSES.txt dist/
+          fi
+          python3 tool/native_distribution.py index --directory dist --version "$VERSION" --output-dir dist
+          python3 tool/native_distribution.py generate-dart \
+            --index dist/native-assets.json \
+            --output dist/native_release_metadata.dart
+          if [[ '${{ inputs.upload_to_draft }}' == 'true' ]]; then
+            cmp dist/native_release_metadata.dart lib/src/native_release_metadata.dart
+          fi
+      - name: Upload complete native release set
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        with:
+          name: native-release-${{ needs.prepare.outputs.version }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+  upload-draft:
+    if: inputs.upload_to_draft
+    needs: [prepare, verify-release-set]
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    permissions:
+      contents: write
+    steps:
+      - name: Download complete native release set
+        uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4.3.0
+        with:
+          name: native-release-${{ needs.prepare.outputs.version }}
+          path: dist
+      - name: Create or validate draft and upload without overwrite
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ needs.prepare.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if gh release view "$TAG" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            draft="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
+            if [[ "$draft" != "true" ]]; then
+              echo "refusing to modify non-draft release $TAG" >&2
+              exit 1
+            fi
+          else
+            gh release create "$TAG" --repo "$GITHUB_REPOSITORY" --verify-tag --draft \
+              --title "$TAG" --notes "Native assets staged for review; this release is not published."
+          fi
+          existing="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json assets --jq '.assets[].name')"
+          while IFS= read -r file; do
+            name="${file##*/}"
+            if grep -Fxq "$name" <<<"$existing"; then
+              echo "refusing to overwrite existing release asset: $name" >&2
+              exit 1
+            fi
+          done < <(printf '%s\n' dist/*)
+          gh release upload "$TAG" dist/* --repo "$GITHUB_REPOSITORY"
