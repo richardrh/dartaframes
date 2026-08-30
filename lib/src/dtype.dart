@@ -571,8 +571,8 @@ const DTypeCapabilities _descriptorOnly = DTypeCapabilities(
 );
 
 /// One representative for each of the 31 descriptors advertised by protocol
-/// v1. Parameterized representatives are illustrative; inspect [capabilities]
-/// before attempting copied import/export or literals.
+/// v2. Parameterized representatives are illustrative; inspect
+/// [DType.capabilities] before attempting copied import/export or literals.
 final List<DType> allDTypes = List.unmodifiable([
   ...simpleDTypes.take(20),
   DecimalType(precision: 38, scale: 0),

@@ -4,7 +4,7 @@
 
 Do not report suspected vulnerabilities in a public issue, discussion, or pull
 request. Use the canonical repository's private
-[GitHub Security Advisory form](https://github.com/richardrh/dartframes/security/advisories/new).
+[GitHub Security Advisory form](https://github.com/richardrh/dartaframes/security/advisories/new).
 Include affected versions or commits, platform and architecture, reproduction
 steps, impact, and any proposed mitigation. Avoid including unrelated secrets
 or personal data.
@@ -21,4 +21,5 @@ identified in release notes when releases begin.
 
 Native binaries must come from the canonical GitHub Releases page and match
 checksums pinned in package source. Automatic native download is currently
-inactive; see [native distribution](doc/native-distribution.md).
+inactive; see
+[native distribution](doc/content/docs/native-distribution.md).

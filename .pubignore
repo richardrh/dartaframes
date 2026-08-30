@@ -14,8 +14,21 @@
 
 /Cargo.toml
 /Cargo.lock
+/mise.toml
 /rust-toolchain.toml
 /pubspec.lock
+
+/doc/.gitignore
+/doc/.hugo_build.lock
+/doc/api/
+/doc/Makefile
+/doc/README.md
+/doc/go.mod
+/doc/go.sum
+/doc/hugo.yaml
+/doc/public/
+/doc/resources/
+/doc/static/api/
 
 /tool/*
 !/tool/native_asset_build.dart

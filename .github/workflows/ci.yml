@@ -32,6 +32,8 @@ jobs:
         run: dart format --output=none --set-exit-if-changed .
       - name: Analyze Dart
         run: dart analyze --fatal-infos
+      - name: Validate source-generated API reference
+        run: dart doc --dry-run
       - name: Run package Dart tests with coverage
         run: dart test --coverage=coverage
       - name: Test CRAP gate tooling

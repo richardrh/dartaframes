@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:ffi';
 
-import 'package:dartaframes_polars/dartaframes_arrow.dart'
+import 'package:dartaframes/arrow.dart'
     show ArrowArray, ArrowField, ArrowSchema, OwnedBatchJsonCodec, RecordBatch;
 
 import 'dtype.dart';

@@ -1,11 +1,18 @@
-# Release process
+---
+title: Release process
+weight: 11
+---
 
-Releases are maintainer operations. Native assets and Dart package publication
-are intentionally separate so an unreviewed binary cannot become the package
-default.
+> **Maintainer documentation:** only release maintainers should perform these
+> steps.
 
-1. Confirm the stable version and changelog and satisfy the blockers in
-   [native distribution](native-distribution.md).
+Native assets and Dart publication stay separate so the package cannot select
+an unreviewed binary.
+
+## Required order
+
+1. Confirm the stable version and changelog. Resolve every blocker in
+   [native binaries](/docs/native-distribution/).
 2. From the candidate commit, dispatch `Native release assets` with
    `upload_to_draft=false`. This builds and tests all five targets and creates
    only retained workflow artifacts; it does not create a tag or release.
@@ -31,7 +38,7 @@ default.
    draft manually.
 7. Only after assets are public, run clean consumer smoke tests on every
    supported target so the promoted hook performs its normal unauthenticated
-   download and cache verification. Publish `dartaframes_polars` to pub.dev
+   download and cache verification. Publish `dartaframes` to pub.dev
    only after those post-public smokes pass.
 
 Neither workflow publishes the GitHub draft or pub package. Draft assets are

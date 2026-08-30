@@ -1,13 +1,29 @@
-# `dartaframes_polars` API coverage
+---
+title: API coverage
+weight: 4
+---
 
-## 1. Scope, version, and methodology
+## At a glance
+
+| | Coverage |
+| --- | --- |
+| Base | Polars Rust 0.55.2; ABI and protocol version 2 |
+| Overall | **Partial** — an explicit-runtime, native-handle binding, not method-for-method Polars parity |
+| Strongest areas | Lazy query composition, core expressions, joins and groups, CSV/Parquet, selectors, SQL, Arrow interchange, and bounded streaming |
+| Main gaps | Eager operations, expression families, reshape, configuration, cloud/database adapters, and host-ecosystem integrations |
+
+The matrices below distinguish **Implemented**, **Partial**, **Missing**, and
+**Host-only/out of scope** coverage. Do not assume that a Python or Rust Polars
+method is available unless the public Dart API exposes it.
+
+## Scope and method
 
 This is a qualitative audit of the **currently exported Dart API**, not a claim
 of method-for-method parity. The native crate is pinned to **Polars Rust
 0.55.2**; protocol ABI is 2 and protocol version is 2. The audit was updated on
 2026-08-29 from:
 
-- `lib/dartaframes_polars.dart` and every exported
+- `lib/polars.dart` and every exported
   implementation file;
 - `protocol/capabilities.json` (including command, operation, and datatype
   capability declarations);
@@ -21,6 +37,10 @@ are not treated as missing Rust opcodes. A Cargo feature being compiled does
 not make it available to Dart: this audit marks functionality available only
 when a public Dart call reaches a supported protocol command.
 
+For an exhaustive source-generated list of public libraries, classes, members,
+signatures, and documentation comments, use the
+[generated API reference](/api/).
+
 Status labels used below:
 
 - **Implemented** — the stated category or deliberately narrow facility is
@@ -31,37 +51,19 @@ Status labels used below:
 - **Host-only/out of scope** — ecosystem or language-host integration rather
   than a missing binding opcode.
 
-## 2. Executive summary
+## Coverage matrices
 
-`dartaframes_polars` is an explicit-runtime, handle-based **lazy-query subset**.
-It has strong basic plan composition: CSV/Parquet scans, projection and filter,
-column creation, sorting/slicing, ordinary/dynamic/rolling group aggregation,
-equality/cross/as-of/non-equi joins, selected row/column reshaping, schema/explain, collection jobs, copied
-record-batch interchange, and CSV/Parquet output. Its expression surface covers
-core operators, richer reductions, flat numeric/trigonometric operations, a
-small direct string subset, cumulative/diff/interpolation operations, fixed
-rolling and EWM expressions, and partition/order-aware windows.
-
-The principal gaps are incomplete eager, expression, reshape, configuration,
-and ecosystem surfaces compared with full Polars. The binding does include a
-partial `Series` API, eager frame transforms, expression namespaces, selectors,
-SQL, advanced joins/groups, native lazy sinks, Arrow C interchange, bounded
-batch streaming, selected optimizer controls, and profiling. Async-looking
-convenience methods are not generally proof of nonblocking execution; native
-workers are used by submitted collection and bounded batch production.
-
-## 3. Coverage matrices
-
-Names in **Implemented** and **Partial** rows are the exact public Dart names.
-`Sync` and Future variants are listed separately where both exist.
+Names shown in **Implemented** and **Partial** rows are exact public Dart names,
+but compact rows may be representative rather than exhaustive. `Sync` and
+Future variants are listed separately when the distinction matters.
 
 ### Runtime and top-level constructors
 
 | Area | Status | Public Dart API and boundary |
 | --- | --- | --- |
-| Explicit runtime | **Implemented** | `Polars.native`, `Polars.open`, `Polars.process`, `Polars.fromClient`; capability discovery through `nativeCapabilitiesSync` and `nativeCapabilities`. `Polars.native` requires promoted native release metadata. There are intentionally no runtime-free globals. |
+| Explicit runtime | **Implemented** | `Polars.native`, `Polars.open`, `Polars.process`, `Polars.fromClient`; capability discovery through `nativeCapabilitiesSync` and `nativeCapabilities`; diagnostic snapshots through `runtimeDiagnosticsSync` and `runtimeDiagnostics`. `Polars.native` requires promoted native release metadata. There are intentionally no runtime-free globals. |
 | Expression constructors | **Partial** | `Polars.col`, `Polars.lit`, `Polars.len`, `Polars.when`; ternary completion is `When.then(...).otherwise(...)`. No ranges, repeats, folds, horizontal aggregators, struct/list constructors, or general Python-style top-level function catalog. |
-| Data sources/constructors | **Partial** | `Polars.scanCsv`, `scanParquet`, `scanIpc`/`scanFeather`, `scanNdjson`, eager local `readJson` and `readIpcStream`, plus copied record-batch/array import. Scans expose typed compact option sets. |
+| Data sources/constructors | **Partial** | `Polars.scanCsv`, `scanParquet`, `scanIpc`/`scanFeather`, `scanNdjson`, eager local `readJsonSync`/`readJson` and `readIpcStreamSync`/`readIpcStream`, plus copied record-batch/array import. Scans expose typed compact option sets. |
 | Concatenation | **Partial** | `Polars.concat` supports `vertical`, `verticalRelaxed`, `diagonal`, `diagonalRelaxed`, and `horizontal`; vertical/diagonal modes expose `rechunk`. |
 | Resource lifecycle | **Implemented** | `Expr.isClosed`/`close`, `LazyFrame.isClosed`/`close`, `DataFrame.isClosed`/`close`, `Series.isClosed`/`close`, and `CancellableQuery.isClosed`/`close`; resources cannot be mixed across `Polars` instances. |
 
@@ -83,7 +85,7 @@ Names in **Implemented** and **Partial** rows are the exact public Dart names.
 | Frame lifecycle/metadata | **Implemented** | `DataFrame.isClosed`, `close`, `lazy`, `infoSync`, `info`, `schemaSync`, `schema`, `shapeSync`. |
 | Frame export/output | **Partial** | Copied batch export plus eager CSV, Parquet, IPC/Feather file, IPC stream, JSON-array, and NDJSON local writers. Local replacement uses a same-directory temporary file before persistence. |
 | Eager transformations | **Partial** | `DataFrame.column`, `selectColumns`, `select`, `filter`, `filterMask`, `withColumns`, `sort`, `slice`, `head`, `tail`, `reverse`, `drop`, and `rename` execute immediately and return independent native handles. Eager group-by, join, distinct, reshape, and row iteration remain absent. |
-| `Series`/typed chunked arrays | **Partial** | `Series` has direct native lifecycle, `infoSync`/`info`, `nameSync`, `dtypeSync`, `lengthSync`, `nullCountSync`, `exportSync`/`export`, `toFrame`, `rename`, `cast`, `slice`/`head`/`tail`, `reverse`, `sort`, `filter`, `dropNulls`, comparisons, `+`/`-`/`*`/`/`, exact typed `sum`/`mean`/`min`/`max`/`first`/`last`, and integer `count`/`nUnique`. Namespaces and broader kernels remain absent. |
+| `Series`/typed chunked arrays | **Partial** | `Series` has direct native lifecycle, `infoSync`/`info`, `nameSync`, `dtypeSync`, `lengthSync`, `nullCountSync`, `exportSync`/`export`, `toFrame`, `rename`, `cast`, `slice`/`head`/`tail`, `reverse`, `sort`, `filter`, `dropNulls`, `append`, `gather`, `unique`, comparisons, `+`/`-`/`*`/`/`, exact typed `sum`/`mean`/`min`/`max`/`first`/`last`, and integer `count`/`nUnique`. Namespaces and broader kernels remain absent. |
 
 ### Expressions: core and scalar operations
 
@@ -178,16 +180,17 @@ direct string methods remain as aliases.
 | Excel/database/table formats | **Host-only/out of scope** | No such Dart adapters exist. Python Excel and database APIs, and ecosystem table-format connectors, are host integrations rather than missing Polars Rust query opcodes. |
 | GPU/Polars Cloud/distributed-service clients | **Host-only/out of scope** | No integration is promised. These require distinct engines/services and should not be inferred from core Rust API categories; this is separate from the missing native object-store I/O noted above. |
 
-## 4. Exact-name reporting
+## Exact-name reporting
 
-Every **Implemented** or **Partial** matrix row above identifies the exact
-public Dart member names that establish that status. Related missing Polars
-families are summarized by category rather than expanded into hundreds of
-Python method names. Generic `Expr.unary`, `binary`, `aggregate`, and `function`
-remain constrained by the native capability allow-lists and therefore do not
-upgrade an unlisted family to implemented.
+Every name shown in an **Implemented** or **Partial** matrix row is an exact
+public Dart member name that helps establish that status; compact rows are not
+an exhaustive API reference. Related missing Polars families are summarized by
+category rather than expanded into hundreds of Python method names. Generic
+`Expr.unary`, `binary`, `aggregate`, and `function` remain constrained by the
+native capability allow-lists and therefore do not upgrade an unlisted family
+to implemented.
 
-## 5. Critical omissions and prioritized next increments
+## Priorities
 
 1. Reconcile Dart and native datatype capability declarations, then test each
    declared literal/import/export/cast boundary.
@@ -200,22 +203,22 @@ upgrade an unlisted family to implemented.
 5. Keep cloud, database, table-format, and host-ecosystem adapters separately
    scoped from the core native binding.
 
-## 6. Import boundary
+## Imports
 
-Consumers import `package:dartaframes_polars/dartaframes_polars.dart` for the
+Consumers import `package:dartaframes/polars.dart` for the
 runtime/query API and the exposed `RecordBatchCodec`. `dart:convert` is only a
 consumer-side tool when JSON formatting is desired (for example, formatting a
 raw capability map); importing it does not provide dataframe or Arrow
 interchange.
 
 Arrow remains available as a **secondary public library in the same package**,
-but the primary `dartaframes_polars.dart` entry point re-exports it because
+but the primary `polars.dart` entry point re-exports it because
 public Polars signatures use its `RecordBatch`, `ArrowArray`, and `ArrowValue`
 types (`fromRecordBatch*`, `fromArrowArray*`, frame/Series `export*`, and
 `Scalar.fromArrow`). Most consumers therefore need only:
 
 ```dart
-import 'package:dartaframes_polars/dartaframes_polars.dart';
+import 'package:dartaframes/polars.dart';
 ```
 
 `RecordBatchCodec` converts by copying owned logical values; it is not Arrow C

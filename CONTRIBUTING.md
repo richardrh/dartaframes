@@ -7,13 +7,19 @@ By participating, you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
 ## Set up
 
-Use Dart 3.13 or later and the Rust toolchain pinned by `rust-toolchain.toml`.
-From the repository root:
+The easiest setup uses [mise](https://mise.jdx.dev/):
 
 ```sh
-dart pub get --enforce-lockfile
-cargo build --locked --package dartaframes_polars_ffi
+mise trust
+mise install
+mise run setup
+mise run native:build
 ```
+
+`mise.toml` installs the pinned Dart, Python, and Rust versions. Without mise,
+use Dart 3.13 or later and the toolchain in `rust-toolchain.toml`, then run
+`dart pub get --enforce-lockfile` and
+`cargo build --locked --package dartaframes_polars_ffi`.
 
 This is one root Dart package. Keep examples in `example/`, benchmarks in
 `benchmark/`, and documentation in `doc/`.
@@ -52,12 +58,12 @@ Use the corresponding debug `.so` on Linux or `.dll` on Windows.
 - Preserve direct native-handle and deterministic `close()` semantics. Add
   lifecycle tests for new handle-producing operations.
 - Keep Dart, native dispatch, capabilities, protocol documentation, and
-  `API_COVERAGE.md` synchronized.
+  `doc/content/docs/api-coverage.md` synchronized.
 - Add Dart tests under `test/` and Rust tests in the native crate as appropriate.
 - Do not commit generated or local outputs such as `.dart_tool/`, `coverage/`,
   `target/`, `build/`, `dist/`, binaries, archives, or benchmark fixtures.
 - Do not hand-edit generated native release metadata. Checksum promotion is a
-  maintainer release task described in `doc/releasing.md`.
+  maintainer release task described in `doc/content/docs/releasing.md`.
 - Do not broaden public claims beyond behavior verified by tests or native
   capabilities.
 

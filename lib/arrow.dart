@@ -6,7 +6,7 @@
 /// fixed-size binary, list/string/binary views, large lists, and run-end
 /// encoding. `int128` and `uint128` are binding extensions rather than Apache
 /// Arrow integer types.
-library;
+library dartaframes_arrow;
 
 export 'src/arrow/array.dart';
 export 'src/arrow/batch.dart';

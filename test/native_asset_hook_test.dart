@@ -10,7 +10,7 @@ import 'package:test/test.dart';
 import '../hook/build.dart' as hook;
 import '../tool/native_asset_build.dart';
 
-import 'package:dartaframes_polars/src/native_asset_manifest.dart';
+import 'package:dartaframes/src/native_asset_manifest.dart';
 
 void main() {
   test('bundles a local custom_library without building it', () async {

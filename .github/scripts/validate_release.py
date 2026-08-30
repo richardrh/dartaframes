@@ -39,7 +39,7 @@ def main() -> None:
     pubspec = (ROOT / "pubspec.yaml").read_text(encoding="utf-8")
     package = one(r"^name:\s*([^\s#]+)\s*$", pubspec, "pubspec package")
     pub_version = one(r"^version:\s*([^\s#]+)\s*$", pubspec, "pubspec version")
-    if package != "dartaframes_polars":
+    if package != "dartaframes":
         raise SystemExit(f"unexpected pub package: {package}")
     cargo = (ROOT / "native/polars_ffi/Cargo.toml").read_text(encoding="utf-8")
     cargo_version = one(r'^version\s*=\s*"([^"]+)"\s*$', cargo, "native Cargo version")

@@ -131,6 +131,7 @@ other fields are. `?` means optional. Handle-valued fields use decimal strings.
 | expression | `exprTernary` | `predicate`, `truthy`, `falsy` |
 | expression | `exprAggregate` | `input`, `op`, and only the options valid for that operation |
 | expression | `exprFunction` | `input`, `name`, `arguments`, plus only the selected function's options |
+| expression | `exprMeta` | `input`, `op`, and `allowAliasing` only for operations that accept it |
 | expression | `exprOver` | `input`, `partitionBy`, `orderBy`, `mapping`, `orderDescending`, `orderNullsLast`, `orderMaintainOrder`, `orderMultithreaded` |
 | selector | `selectorAll` | none |
 | selector | `selectorEmpty` | none |

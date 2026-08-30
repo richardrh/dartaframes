@@ -1,0 +1,8 @@
+dartdoc:
+  # Both public entry points intentionally expose the owned Arrow types.
+  ambiguousReexportScorerMinConfidence: 0
+  include:
+    - dartaframes_arrow
+    - dartaframes_polars
+  errors:
+    - unresolved-doc-reference

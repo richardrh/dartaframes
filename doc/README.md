@@ -1,13 +1,50 @@
-# Documentation
+# Documentation site
 
-- [API coverage](../API_COVERAGE.md) — qualitative map of the partial Dart API
-  to Polars categories.
-- [Native distribution](native-distribution.md) — supported targets, verified
-  assets, cache behavior, and activation controls.
-- [Release process](releasing.md) — native asset and pub release ordering.
-- [CRAP quality gate](crap-quality-gate.md) — Dart complexity/coverage ratchet.
-- [Protocol reference](../protocol/README.md) — ABI, commands, capabilities,
-  ownership, and errors.
-- [Contributing](../CONTRIBUTING.md) — setup, tests, and change requirements.
-- [Security](../SECURITY.md) — private vulnerability reporting.
-- [Changelog](../CHANGELOG.md) — release history.
+This [Hugo](https://gohugo.io/) site uses the
+[Hextra](https://imfing.github.io/hextra/) theme. Guides live in `content/`;
+`dart doc` generates the API reference. The combined, uncommitted output goes
+to `public/`.
+
+## Prerequisites
+
+- Dart 3.13 or later
+- Hugo Extended 0.158.0 or later
+- Go 1.26 or later
+
+On macOS with Homebrew:
+
+```sh
+brew install hugo go
+```
+
+## Preview locally
+
+From the repository root:
+
+```sh
+make -C doc serve
+```
+
+Open <http://localhost:1313/dartaframes/>. The first run resolves locked Dart
+dependencies and downloads the pinned Hextra module.
+
+## Build
+
+```sh
+make -C doc build
+```
+
+Output goes to `doc/public/`, including dartdoc at `doc/public/api/`. Clean it
+with:
+
+```sh
+make -C doc clean
+```
+
+After intentionally changing the Hextra version, refresh its pinned metadata:
+
+```sh
+hugo mod tidy --source doc
+```
+
+Commit both `doc/go.mod` and `doc/go.sum` after a theme update.
