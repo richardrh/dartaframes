@@ -4,15 +4,17 @@ linkTitle: Documentation
 weight: 1
 ---
 
-`dartaframes` is a pre-release Dart binding to Rust Polars with partial API
-coverage. The package and native binaries are not published yet. Start with a
-source build and `Polars.open(path)`; `Polars.native()` remains unavailable
-until verified release assets exist.
+`dartaframes` is a pre-release Dart binding to Rust Polars with a Dart-native
+Apache Arrow value model. The package and native binaries are not published
+yet. Start with a source build and `Polars.open(path)`; `Polars.native()` remains
+unavailable until verified release assets exist.
 
 ## For users
 
-- [Getting started](/docs/getting-started/) — runtime setup, lazy queries, and
-  handle ownership.
+- [Getting started](/docs/getting-started/) — runtime setup plus lazy CSV and
+  Parquet queries.
+- [Arrow interoperability](/docs/arrow-interchange/) — the Dart Arrow port,
+  copied record batches, and Arrow C Data/C Stream.
 - [Build from source](/docs/build-from-source/) — install pinned tools with
   `mise` and build the current native library.
 - [API reference](/api/) — generated documentation for the public Dart API.

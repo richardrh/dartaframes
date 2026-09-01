@@ -6,10 +6,14 @@ weight: 3
 The API reference documents exported declarations, signatures, and comments
 from the package's two public entrypoints:
 
-- `package:dartaframes/polars.dart` — the primary Polars and
-  Arrow API.
-- `package:dartaframes/arrow.dart` — the focused owned Arrow
-  value API, also re-exported by the primary library.
+- `package:dartaframes/polars.dart` — native Polars queries, frames, Series, and
+  the re-exported Arrow value API.
+- `package:dartaframes/arrow.dart` — the focused Dart implementation of owned
+  Arrow schemas, arrays, values, builders, and record batches.
+
+The Arrow entrypoint is a real Dart columnar value model, not merely Polars
+conversion helpers. Its current scope and standard C interface support are
+described in [Arrow interoperability](/docs/arrow-interchange/).
 
 [Browse the generated Dart API reference](/api/)
 
