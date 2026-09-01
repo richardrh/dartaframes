@@ -886,7 +886,8 @@ mod tests {
                 "frame",
                 "series",
                 "job",
-                "sqlContext"
+                "sqlContext",
+                "batchStream"
             ])
         );
         let command_count: usize = value["commands"]
@@ -895,7 +896,7 @@ mod tests {
             .values()
             .map(|commands| commands.as_array().unwrap().len())
             .sum();
-        assert_eq!(command_count, 105);
+        assert_eq!(command_count, 112);
         assert!(value["commands"]["expression"]
             .as_array()
             .unwrap()
