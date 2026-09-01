@@ -1,0 +1,52 @@
+baseURL: https://richardrh.github.io/dartaframes/
+title: DartAframes
+locale: en-US
+enableRobotsTXT: true
+
+disableKinds:
+  - taxonomy
+  - term
+
+module:
+  hugoVersion:
+    extended: true
+    min: 0.158.0
+  imports:
+    - path: github.com/imfing/hextra
+
+markup:
+  highlight:
+    noClasses: false
+
+menu:
+  main:
+    - name: Documentation
+      pageRef: /docs
+      weight: 1
+    - name: API reference
+      url: /api/
+      weight: 2
+    - name: Search
+      weight: 3
+      params:
+        type: search
+    - name: GitHub
+      url: https://github.com/richardrh/dartaframes
+      weight: 4
+      params:
+        icon: github
+
+params:
+  description: Direct native-handle Polars expressions and frames for Dart.
+
+  navbar:
+    displayTitle: true
+    displayLogo: false
+
+  footer:
+    displayCopyright: true
+    displayPoweredBy: true
+
+  editURL:
+    enable: true
+    base: https://github.com/richardrh/dartaframes/edit/master/doc/content

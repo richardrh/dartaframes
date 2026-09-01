@@ -4,7 +4,7 @@ import 'dart:math';
 
 import 'package:crypto/crypto.dart';
 
-import 'package:dartaframes_polars/src/native_asset_manifest.dart';
+import 'package:dartaframes/src/native_asset_manifest.dart';
 
 typedef NativeAssetDownloader = Future<void> Function(
   Uri uri,

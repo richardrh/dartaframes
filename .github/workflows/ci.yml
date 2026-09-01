@@ -32,6 +32,8 @@ jobs:
         run: dart format --output=none --set-exit-if-changed .
       - name: Analyze Dart
         run: dart analyze --fatal-infos
+      - name: Validate source-generated API reference
+        run: dart doc --dry-run
       - name: Run package Dart tests with coverage
         run: dart test --coverage=coverage
       - name: Test CRAP gate tooling
@@ -65,7 +67,7 @@ jobs:
           fi
       - name: Upload coverage and CRAP reports
         if: always()
-        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4.6.2
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
           name: coverage-and-crap
           path: |
@@ -78,7 +80,7 @@ jobs:
       # failures must not fail the repository-owned quality gate.
       - name: Upload LCOV to Codecov
         if: always()
-        uses: codecov/codecov-action@5a1091511ad55cbe89839c7260b706298ca349f7 # v5.5.1
+        uses: codecov/codecov-action@fb8b3582c8e4def4969c97caa2f19720cb33a72f # v7.0.0
         with:
           files: coverage/lcov.info
           fail_ci_if_error: false

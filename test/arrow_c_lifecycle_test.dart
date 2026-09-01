@@ -1,6 +1,6 @@
 import 'dart:ffi';
 
-import 'package:dartaframes_polars/src/arrow_c.dart';
+import 'package:dartaframes/src/arrow_c.dart';
 import 'package:ffi/ffi.dart';
 import 'package:test/test.dart';
 

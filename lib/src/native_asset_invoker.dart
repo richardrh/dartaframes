@@ -33,7 +33,7 @@ final class _NativeAssetInvoker implements ProtocolInvoker, ArrowCBridge {
       version = nativeAssetAbiVersion();
     } catch (error) {
       throw StateError(
-        'Polars.native() could not resolve the dartaframes_polars native '
+        'Polars.native() could not resolve the dartaframes native '
         'asset. Reviewed release metadata may not be activated for this '
         'target; use Polars.open(path) for a development library. '
         'Resolver error: $error',

@@ -6,13 +6,13 @@ export 'native_release_metadata.dart';
 
 /// The code-asset identifier shared by the build hook and `@Native` bindings.
 const nativeAssetName = 'src/native_asset_bindings.dart';
-const nativeAssetId = 'package:dartaframes_polars/$nativeAssetName';
+const nativeAssetId = 'package:dartaframes/$nativeAssetName';
 
 /// The only repository identity used by native distribution code.
 ///
 /// Change and review this constant before release if the canonical repository
 /// moves.
-const nativeReleaseRepository = 'https://github.com/richardrh/dartframes';
+const nativeReleaseRepository = 'https://github.com/richardrh/dartaframes';
 
 String nativeReleaseTarget(String os, String architecture) =>
     switch ((os, architecture)) {
@@ -32,12 +32,12 @@ NativeReleaseArtifact pinnedReleaseArtifact(
   final artifact = artifacts[target];
   if (artifact == null) {
     throw UnsupportedError(
-      'No pinned dartaframes_polars native release target for $target',
+      'No pinned dartaframes native release target for $target',
     );
   }
   if (!artifact.isPromoted) {
     throw StateError(
-      'Pinned dartaframes_polars native releases are not active: '
+      'Pinned dartaframes native releases are not active: '
       '${artifact.rawAssetName} has no trusted checksum and byte size',
     );
   }

@@ -1,4 +1,4 @@
-import 'package:dartaframes_polars/dartaframes_polars.dart';
+import 'package:dartaframes/polars.dart';
 import 'package:test/test.dart';
 
 final class SelectorSqlInvoker implements ProtocolInvoker {

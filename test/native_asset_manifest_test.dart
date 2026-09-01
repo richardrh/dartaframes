@@ -1,4 +1,4 @@
-import 'package:dartaframes_polars/src/native_asset_manifest.dart';
+import 'package:dartaframes/src/native_asset_manifest.dart';
 import 'package:test/test.dart';
 
 void main() {

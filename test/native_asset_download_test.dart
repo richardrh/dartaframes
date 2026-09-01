@@ -5,7 +5,7 @@ import 'dart:async';
 import 'dart:io';
 
 import 'package:crypto/crypto.dart';
-import 'package:dartaframes_polars/src/native_asset_manifest.dart';
+import 'package:dartaframes/src/native_asset_manifest.dart';
 import 'package:test/test.dart';
 
 import '../tool/native_asset_download.dart';

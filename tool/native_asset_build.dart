@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:code_assets/code_assets.dart';
 import 'package:hooks/hooks.dart';
 
-import 'package:dartaframes_polars/src/native_asset_manifest.dart';
+import 'package:dartaframes/src/native_asset_manifest.dart';
 
 import 'native_asset_download.dart';
 
@@ -32,7 +32,7 @@ Future<void> main(List<String> args) async {
         if (libraryUri == null) {
           throw const FormatException(
             'source custom_library requires '
-            'hooks.user_defines.dartaframes_polars.custom_library',
+            'hooks.user_defines.dartaframes.custom_library',
           );
         }
         final library = File.fromUri(libraryUri);
@@ -44,7 +44,7 @@ Future<void> main(List<String> args) async {
         final expectedName = nativeReleaseArtifacts[target]?.libraryName;
         if (expectedName == null) {
           throw UnsupportedError(
-            'dartaframes_polars has no native distribution target for '
+            'dartaframes has no native distribution target for '
             '${input.config.code.targetOS.name}/'
             '${input.config.code.targetArchitecture.name}',
           );
@@ -80,7 +80,7 @@ Future<void> main(List<String> args) async {
         );
       default:
         throw FormatException(
-          'Unsupported dartaframes_polars native source "$selectedSource"; '
+          'Unsupported dartaframes native source "$selectedSource"; '
           'expected disabled, custom_library, or pinned_release',
         );
     }
@@ -96,12 +96,12 @@ String selectNativeAssetSource({
 }) {
   if (source != null && source is! String) {
     throw const FormatException(
-      'hooks.user_defines.dartaframes_polars.source must be a string',
+      'hooks.user_defines.dartaframes.source must be a string',
     );
   }
   if (customLibrary != null && customLibrary is! String) {
     throw const FormatException(
-      'hooks.user_defines.dartaframes_polars.custom_library must be a path',
+      'hooks.user_defines.dartaframes.custom_library must be a path',
     );
   }
   return source as String? ??
