@@ -72,6 +72,22 @@ Use this focused entrypoint when only the Dart Arrow value model is needed.
 [Arrow interoperability](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/arrow-interchange.md) for scope,
 ownership, and examples.
 
+```dart
+import 'package:dartaframes/arrow.dart'; // Pure Dart, no native library.
+```
+
+Use Polars independently for native file scans and computation:
+
+```dart
+import 'package:dartaframes/polars.dart';
+
+final polars = Polars.open('/path/to/libdartaframes_polars_ffi.dylib');
+final frame = polars.scanParquet('sales.parquet').collectSync();
+```
+
+Bridge the two APIs with `frame.exportSync()` and
+`polars.fromRecordBatchSync(batch)`.
+
 ## Resource lifetime
 
 Native-backed objects have finalizers, so normal application code can stay

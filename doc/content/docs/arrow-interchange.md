@@ -14,6 +14,18 @@ import 'package:dartaframes/arrow.dart';
 The primary `package:dartaframes/polars.dart` entrypoint re-exports these types,
 so Polars users normally need only one import.
 
+## Choose an entrypoint
+
+Use the two libraries independently according to where the work should run:
+
+| Import | Use it for | Native library required? |
+| --- | --- | --- |
+| `package:dartaframes/arrow.dart` | Dart-owned schemas, arrays, values, builders, codecs, and record batches | No |
+| `package:dartaframes/polars.dart` | CSV/Parquet scans, expressions, DataFrames, Series, SQL, and native computation | Yes |
+
+`polars.dart` re-exports the Arrow API because Polars imports and exports Arrow
+values. Importing `arrow.dart` alone does not load Polars or require Rust.
+
 ## Scope
 
 The current Arrow port covers the owned value model needed for Polars import,
@@ -24,6 +36,70 @@ IPC feature, filesystem, dataset, or compute kernel.
 Keeping that boundary explicit avoids suggesting compatibility that has not yet
 been implemented or tested. The [API coverage audit](/docs/api-coverage/) lists
 the exact supported datatypes and interchange paths.
+
+## Use Arrow without Polars
+
+This example creates a record batch entirely in Dart. It requires no native
+library and none of its values need to be closed.
+
+```dart
+import 'package:dartaframes/arrow.dart';
+
+void main() {
+  final nameType = const ArrowUtf8Type();
+  final ageType = ArrowIntegerType(32);
+
+  final batch = RecordBatch(
+    ArrowSchema([
+      ArrowField('name', nameType),
+      ArrowField('age', ageType),
+    ]),
+    [
+      ArrowArray(nameType, const [
+        ArrowStringValue('Ada'),
+        ArrowStringValue('Grace'),
+        ArrowStringValue('Linus'),
+      ]),
+      ArrowArray(ageType, [
+        ArrowIntegerValue(42),
+        ArrowIntegerValue(37),
+        ArrowIntegerValue(55),
+      ]),
+    ],
+  );
+
+  print(batch.length);
+  print(const OwnedBatchJsonCodec().encode(batch));
+}
+```
+
+## Use Polars without constructing Arrow values
+
+Polars can scan files and execute a query directly. Arrow types appear only if
+you choose to export the result.
+
+```dart
+import 'package:dartaframes/polars.dart';
+
+void main() {
+  final polars = Polars.open('/path/to/libdartaframes_polars_ffi.dylib');
+
+  final result = polars
+      .scanParquet('sales.parquet')
+      .filter(polars.col('year').eq(2026))
+      .select([
+        polars.col('region'),
+        polars.col('revenue'),
+      ])
+      .collectSync();
+
+  print(result.shapeSync());
+  result.close();
+}
+```
+
+Once verified native assets are published, replace `Polars.open(path)` with
+`Polars.native()`.
 
 ## Copy a frame into Dart
 
@@ -43,6 +119,32 @@ batch can be imported into the same or another `Polars` runtime:
 ```dart
 final copiedFrame = polars.fromRecordBatchSync(batch);
 ```
+
+The reverse direction starts with a pure Dart batch and imports it into Polars:
+
+```dart
+final type = ArrowIntegerType(32);
+final batch = RecordBatch(
+  ArrowSchema([ArrowField('value', type)]),
+  [
+    ArrowArray(type, [
+      ArrowIntegerValue(10),
+      ArrowIntegerValue(20),
+      ArrowIntegerValue(30),
+    ]),
+  ],
+);
+
+final frame = polars.fromRecordBatchSync(batch);
+final totals = frame
+    .lazy()
+    .select([polars.col('value').sum.alias('total')])
+    .collectSync();
+```
+
+The `RecordBatch` remains a Dart-owned value. `frame` and `totals` are
+native-backed Polars values and can be closed when deterministic release is
+desired.
 
 ## Arrow C Data and C Stream
 
