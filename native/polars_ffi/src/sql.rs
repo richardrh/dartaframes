@@ -102,7 +102,7 @@ pub fn invoke(command: &str, v: &Value) -> Result<Value> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use polars::df;
+    use polars::{df, prelude::IntoLazy};
 
     #[test]
     fn registered_source_and_result_are_independent() {

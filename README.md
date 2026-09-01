@@ -4,66 +4,116 @@
 [![Codecov](https://codecov.io/gh/richardrh/dartaframes/graph/badge.svg)](https://codecov.io/gh/richardrh/dartaframes)
 [![License](https://img.shields.io/badge/license-Apache--2.0-blue.svg)](https://github.com/richardrh/dartaframes/blob/master/LICENSE)
 
-`dartaframes` is a Dart binding to [Polars](https://pola.rs/), backed by Rust
-Polars. It provides lazy queries, eager frames and Series, Arrow interchange,
-and bounded batch streaming through native handles.
+Native [Polars](https://pola.rs/) and Apache Arrow data for Dart.
 
-This is a **pre-release with partial Polars 0.55.2 coverage**. See the
-[coverage audit](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/api-coverage.md)
-before assuming a Rust or Python Polars API is available.
+`dartaframes` runs lazy Polars queries through a Rust native library and brings
+the results back through a Dart-native Arrow data model. It includes:
 
-## Current availability
+- lazy CSV and Parquet scans with projection and predicate pushdown;
+- eager `DataFrame` and `Series` operations;
+- owned Arrow arrays, schemas, values, and record batches implemented in Dart;
+- zero-copy-compatible Arrow C Data and C Stream interchange; and
+- bounded record-batch streaming.
 
-The package and native binaries are not published yet. This dependency is for a
-future pub release:
+This is a **pre-release with partial Polars 0.55.2 coverage**. The Arrow layer is
+also intentionally scoped: it is a Dart port of the Arrow columnar data model
+and interchange interfaces used by this package, not a port of the complete
+Apache Arrow compute ecosystem. See [API coverage](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/api-coverage.md)
+for the current surface.
 
-```yaml
-dependencies:
-  dartaframes: 0.1.0-dev.1
-```
+## Quick start
 
-For now, clone the repository, [build the native library with
-mise](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/build-from-source.md),
-and open it with `Polars.open(path)`. After the first release, the package will
-download and verify the matching prebuilt binary automatically and applications
-will use `Polars.native()` without Rust or `mise`.
-
-## Example: print a CSV head
+The package and native binaries are not published yet. Clone the repository,
+[build the native library with mise](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/build-from-source.md), and
+pass its path to `Polars.open`.
 
 ```dart
 import 'package:dartaframes/polars.dart';
 
 void main() {
   final polars = Polars.open('/path/to/libdartaframes_polars_ffi.dylib');
-  final scan = polars.scanCsv('example/series_arrow_people.csv');
-  try {
-    final limited = scan.head(3);
-    try {
-      final frame = limited.collectSync();
-      try {
-        print(const OwnedBatchJsonCodec().encode(frame.exportSync()));
-      } finally {
-        frame.close();
-      }
-    } finally {
-      limited.close();
-    }
-  } finally {
-    scan.close();
-  }
+
+  final people = polars.scanCsv('people.csv').head(3).collectSync();
+  print(const OwnedBatchJsonCodec().encode(people.exportSync()));
 }
 ```
 
-Use the actual `.dylib`, `.so`, or `.dll` path. See
-[Getting started](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/getting-started.md)
-for ownership guidance and [API reference instructions](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/api-reference.md)
-for callable APIs.
+The same lazy API works with Parquet:
+
+```dart
+final sales = polars
+    .scanParquet('sales.parquet')
+    .select([polars.col('region'), polars.col('revenue')])
+    .collectSync();
+```
+
+After the first release, verified prebuilt binaries will make the usual setup:
+
+```dart
+final polars = Polars.native();
+```
+
+See [Getting started](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/getting-started.md) for query examples and
+[Build from source](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/build-from-source.md) for the current setup.
+
+## Arrow for Dart
+
+The repository contains an owned, strongly typed Arrow representation written
+in Dart. Polars frames and series can be copied into `RecordBatch` and
+`ArrowArray` values, or exchanged with compatible native libraries through the
+standard Arrow C Data and C Stream interfaces.
+
+```dart
+import 'package:dartaframes/arrow.dart';
+```
+
+Use this focused entrypoint when only the Dart Arrow value model is needed.
+`package:dartaframes/polars.dart` re-exports it for Polars applications. Read
+[Arrow interoperability](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/arrow-interchange.md) for scope,
+ownership, and examples.
+
+```dart
+import 'package:dartaframes/arrow.dart'; // Pure Dart, no native library.
+```
+
+Use Polars independently for native file scans and computation:
+
+```dart
+import 'package:dartaframes/polars.dart';
+
+final polars = Polars.open('/path/to/libdartaframes_polars_ffi.dylib');
+final frame = polars.scanParquet('sales.parquet').collectSync();
+```
+
+Bridge the two APIs with `frame.exportSync()` and
+`polars.fromRecordBatchSync(batch)`.
+
+## Resource lifetime
+
+Native-backed objects have finalizers, so normal application code can stay
+idiomatic and does not need nested `try`/`finally` blocks. `close()` remains
+available and idempotent when deterministic release matters, especially in
+servers, loops, benchmarks, and batch-stream consumers.
+
+```dart
+final query = polars.scanCsv('events.csv');
+final frame = query.collectSync();
+
+// Use frame...
+
+frame.close();
+query.close();
+```
+
+Derived native values own independent handles. Values from different `Polars`
+runtimes cannot be mixed. Pure Dart Arrow values such as `RecordBatch` do not
+need to be closed.
 
 ## Public entrypoints
 
 ```dart
-import 'package:dartaframes/polars.dart'; // Runtime, query, and re-exported Arrow API.
-import 'package:dartaframes/arrow.dart';  // Focused owned Arrow value API.
+import 'package:dartaframes/polars.dart'; // Polars plus the Arrow value API.
+import 'package:dartaframes/arrow.dart';  // Arrow values without Polars APIs.
 ```
 
 Most applications need only `polars.dart`.
@@ -76,16 +126,9 @@ Most applications need only `polars.dart`.
 | Linux GNU | `arm64`, `x64` |
 | Windows MSVC | `x64` |
 
-Android, iOS, other native targets, and the web are not supported. Distribution
-details and its fail-closed verification contract are in
-[Native binaries](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/native-distribution.md).
-
-## Ownership
-
-`Expr`, `LazyFrame`, `DataFrame`, `Series`, query jobs, and batch streams own
-native handles. Derived values are independent, but values from different
-`Polars` runtimes cannot be mixed. Call the idempotent `close()` promptly;
-finalizers are a fallback. Close each streamed batch and the stream itself.
+Android, iOS, other native targets, and the web are not supported. See
+[Native binaries](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/native-distribution.md) for distribution and
+verification details.
 
 ## Development
 
@@ -101,12 +144,8 @@ python3 -m unittest discover -s tool -p 'test_native_*.py'
 cargo test --locked --workspace
 ```
 
-See [Contributing](https://github.com/richardrh/dartaframes/blob/master/CONTRIBUTING.md),
-the [documentation index](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/_index.md),
-and [documentation build instructions](https://github.com/richardrh/dartaframes/blob/master/doc/README.md).
-Maintainers should use the documented
-[release process](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/releasing.md)
-and [CRAP quality gate](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/crap-quality-gate.md).
+See [Contributing](https://github.com/richardrh/dartaframes/blob/master/CONTRIBUTING.md), the [documentation index](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/_index.md),
+and the [release process](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/releasing.md).
 
 ## Security and license
 
