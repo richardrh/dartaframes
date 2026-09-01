@@ -66,64 +66,28 @@ void main(List<String> arguments) {
   final polars = libraryPath == null
       ? Polars.native()
       : Polars.open(libraryPath);
-  final scan = polars.scanCsv(csvPath);
-  try {
-    final limited = scan.head(3);
-    try {
-      final head = limited.collectSync();
-      try {
-        stdout.writeln('DataFrame head:');
-        _printFrame(head);
+  final head = polars.scanCsv(csvPath).head(3).collectSync();
 
-        final ages = head.column('age');
-        try {
-          final doubledAges = ages * 2;
-          try {
-            final firstTwoAges = doubledAges.head(2);
-            try {
-              final seriesHead = firstTwoAges.toFrame();
-              try {
-                stdout.writeln('\nSeries head:');
-                _printFrame(seriesHead);
-              } finally {
-                seriesHead.close();
-              }
-            } finally {
-              firstTwoAges.close();
-            }
-          } finally {
-            doubledAges.close();
-          }
-        } finally {
-          ages.close();
-        }
+  stdout.writeln('DataFrame head:');
+  _printFrame(head);
 
-        final arrow = head.exportArrowC();
-        late final DataFrame arrowRoundTrip;
-        try {
-          arrowRoundTrip = polars.fromArrowCData(arrow);
-        } finally {
-          // Import consumes the payload. Closing deletes the empty C structs.
-          arrow.close();
-        }
-        try {
-          final arrowHead = arrowRoundTrip.head(2);
-          try {
-            stdout.writeln('\nArrow C round-trip head:');
-            _printFrame(arrowHead);
-          } finally {
-            arrowHead.close();
-          }
-        } finally {
-          arrowRoundTrip.close();
-        }
-      } finally {
-        head.close();
-      }
-    } finally {
-      limited.close();
-    }
-  } finally {
-    scan.close();
-  }
+  final seriesHead = (head.column('age') * 2).head(2).toFrame();
+  stdout.writeln('\nSeries head:');
+  _printFrame(seriesHead);
+
+  final arrow = head.exportArrowC();
+  final arrowRoundTrip = polars.fromArrowCData(arrow);
+  // Import consumes the payload. Closing deletes the empty C structs.
+  arrow.close();
+
+  final arrowHead = arrowRoundTrip.head(2);
+  stdout.writeln('\nArrow C round-trip head:');
+  _printFrame(arrowHead);
+
+  // Native-backed values have finalizers. Explicit close calls are useful in
+  // long-running processes when deterministic release is desirable.
+  arrowHead.close();
+  arrowRoundTrip.close();
+  seriesHead.close();
+  head.close();
 }
