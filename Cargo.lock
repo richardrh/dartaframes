@@ -482,6 +482,7 @@ name = "dartaframes_polars_ffi"
 version = "0.1.0"
 dependencies = [
  "base64 0.23.1",
+ "either",
  "parking_lot",
  "polars",
  "polars-arrow",

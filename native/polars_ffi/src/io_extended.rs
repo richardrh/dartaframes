@@ -493,7 +493,10 @@ mod tests {
         assert!(!statistics.min_value);
         assert!(statistics.distinct_count);
         assert_eq!(statistics.binary_statistics_truncate_length, Some(16));
-        assert_eq!(byte(&json!({"quoteChar":"'"}), "quoteChar", b'"').unwrap(), b'\'');
+        assert_eq!(
+            byte(&json!({"quoteChar":"'"}), "quoteChar", b'"').unwrap(),
+            b'\''
+        );
         assert!(byte(&json!({"quoteChar":"é"}), "quoteChar", b'"').is_err());
         assert!(nonzero_opt(&json!({"rowGroupSize":0}), "rowGroupSize").is_err());
     }
