@@ -200,45 +200,58 @@ extension LocalIoLazyFrame on LazyFrame {
   /// Executes a native streaming CSV sink synchronously on the calling isolate.
   void sinkCsvSync(
     String path, {
-    bool includeHeader = true,
-    String separator = ',',
+    bool? includeHeader,
+    String? separator,
+    CsvWriteOptions csv = const CsvWriteOptions(),
     LazySinkOptions options = const LazySinkOptions(),
   }) {
-    _validateSeparator(separator);
     _sinkLocalSync('lazySinkCsv', path, {
-      'includeHeader': includeHeader,
-      'separator': separator,
+      ..._csvWriteOptions(
+        csv,
+        includeHeader: includeHeader,
+        separator: separator,
+        eager: false,
+      ),
       ...options._toJson(),
     });
   }
 
   void sinkCsv(
     String path, {
-    bool includeHeader = true,
-    String separator = ',',
+    bool? includeHeader,
+    String? separator,
+    CsvWriteOptions csv = const CsvWriteOptions(),
     LazySinkOptions options = const LazySinkOptions(),
   }) => sinkCsvSync(
     path,
     includeHeader: includeHeader,
     separator: separator,
+    csv: csv,
     options: options,
   );
 
   /// Executes a native streaming Parquet sink synchronously.
   void sinkParquetSync(
     String path, {
-    String compression = 'zstd',
+    String? compression,
+    ParquetWriteOptions parquet = const ParquetWriteOptions(),
     LazySinkOptions options = const LazySinkOptions(),
   }) => _sinkLocalSync('lazySinkParquet', path, {
-    'compression': compression,
+    ..._parquetWriteOptions(parquet, compression: compression, eager: false),
     ...options._toJson(),
   });
 
   void sinkParquet(
     String path, {
-    String compression = 'zstd',
+    String? compression,
+    ParquetWriteOptions parquet = const ParquetWriteOptions(),
     LazySinkOptions options = const LazySinkOptions(),
-  }) => sinkParquetSync(path, compression: compression, options: options);
+  }) => sinkParquetSync(
+    path,
+    compression: compression,
+    parquet: parquet,
+    options: options,
+  );
 
   /// Executes a native streaming IPC/Feather file sink synchronously.
   void sinkIpcSync(

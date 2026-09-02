@@ -291,18 +291,22 @@ final class DataFrame {
 
   void writeCsvSync(
     String path, {
-    bool includeHeader = true,
-    String separator = ',',
+    bool? includeHeader,
+    String? separator,
+    CsvWriteOptions options = const CsvWriteOptions(),
   }) {
     _validatePath(path);
-    _validateSeparator(separator);
+    final values = _csvWriteOptions(
+      options,
+      includeHeader: includeHeader,
+      separator: separator,
+    );
     final lease = _owner.lease('DataFrame');
     try {
       _runtime._client.invokeSync('frameWriteCsv', {
         'frame': lease.handle.toString(),
         'path': path,
-        'includeHeader': includeHeader,
-        'separator': separator,
+        ...values,
       });
     } finally {
       lease.end();
@@ -311,46 +315,60 @@ final class DataFrame {
 
   Future<void> writeCsv(
     String path, {
-    bool includeHeader = true,
-    String separator = ',',
+    bool? includeHeader,
+    String? separator,
+    CsvWriteOptions options = const CsvWriteOptions(),
   }) async {
     _validatePath(path);
-    _validateSeparator(separator);
+    final values = _csvWriteOptions(
+      options,
+      includeHeader: includeHeader,
+      separator: separator,
+    );
     final lease = _owner.lease('DataFrame');
     try {
       await _runtime._client.invoke('frameWriteCsv', {
         'frame': lease.handle.toString(),
         'path': path,
-        'includeHeader': includeHeader,
-        'separator': separator,
+        ...values,
       });
     } finally {
       lease.end();
     }
   }
 
-  void writeParquetSync(String path, {String compression = 'zstd'}) {
+  void writeParquetSync(
+    String path, {
+    String? compression,
+    ParquetWriteOptions options = const ParquetWriteOptions(),
+  }) {
     _validatePath(path);
+    final values = _parquetWriteOptions(options, compression: compression);
     final lease = _owner.lease('DataFrame');
     try {
       _runtime._client.invokeSync('frameWriteParquet', {
         'frame': lease.handle.toString(),
         'path': path,
-        'compression': compression,
+        ...values,
       });
     } finally {
       lease.end();
     }
   }
 
-  Future<void> writeParquet(String path, {String compression = 'zstd'}) async {
+  Future<void> writeParquet(
+    String path, {
+    String? compression,
+    ParquetWriteOptions options = const ParquetWriteOptions(),
+  }) async {
     _validatePath(path);
+    final values = _parquetWriteOptions(options, compression: compression);
     final lease = _owner.lease('DataFrame');
     try {
       await _runtime._client.invoke('frameWriteParquet', {
         'frame': lease.handle.toString(),
         'path': path,
-        'compression': compression,
+        ...values,
       });
     } finally {
       lease.end();

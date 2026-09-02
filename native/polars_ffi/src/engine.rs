@@ -9,7 +9,7 @@ use crate::{
 };
 use polars::prelude::*;
 use serde_json::{json, Value};
-use std::path::Path;
+use std::{num::NonZeroUsize, path::Path};
 use tempfile::NamedTempFile;
 
 fn response(handle: u64, kind: &str) -> Value {
@@ -584,12 +584,81 @@ fn path(v: &Value) -> Result<&str> {
     }
     Ok(p)
 }
+fn string_opt<'a>(v: &'a Value, key: &str) -> Result<Option<&'a str>> {
+    v.get(key)
+        .map(|x| {
+            x.as_str()
+                .ok_or_else(|| EngineError::Invalid(format!("'{key}' must be a string")))
+        })
+        .transpose()
+}
+fn bool_opt(v: &Value, key: &str) -> Result<Option<bool>> {
+    v.get(key)
+        .map(|x| {
+            x.as_bool()
+                .ok_or_else(|| EngineError::Invalid(format!("'{key}' must be a boolean")))
+        })
+        .transpose()
+}
+fn usize_value_opt(v: &Value, key: &str) -> Result<Option<usize>> {
+    v.get(key)
+        .map(|x| {
+            x.as_u64()
+                .ok_or_else(|| EngineError::Invalid(format!("'{key}' must be unsigned")))
+                .and_then(|x| {
+                    usize::try_from(x)
+                        .map_err(|_| EngineError::Invalid(format!("'{key}' is too large")))
+                })
+        })
+        .transpose()
+}
+fn positive_usize_opt(v: &Value, key: &str) -> Result<Option<usize>> {
+    let value = usize_value_opt(v, key)?;
+    if value == Some(0) {
+        return Err(EngineError::Invalid(format!("'{key}' must be positive")));
+    }
+    Ok(value)
+}
+fn nonzero(v: &Value, key: &str, default: usize) -> Result<NonZeroUsize> {
+    NonZeroUsize::new(usize_value_opt(v, key)?.unwrap_or(default))
+        .ok_or_else(|| EngineError::Invalid(format!("'{key}' must be positive")))
+}
+fn byte(v: &Value, key: &str, default: u8) -> Result<u8> {
+    match string_opt(v, key)? {
+        None => Ok(default),
+        Some(value) if value.as_bytes().len() == 1 => Ok(value.as_bytes()[0]),
+        Some(_) => Err(EngineError::Invalid(format!("'{key}' must be one byte"))),
+    }
+}
+fn optional_string<'a>(v: &'a Value, key: &str, default: &'a str) -> Result<&'a str> {
+    string_opt(v, key).map(|x| x.unwrap_or(default))
+}
+fn parquet_statistics(v: &Value) -> Result<StatisticsOptions> {
+    Ok(StatisticsOptions {
+        min_value: b::optional_bool(v, "statisticsMin", true)?,
+        max_value: b::optional_bool(v, "statisticsMax", true)?,
+        distinct_count: b::optional_bool(v, "statisticsDistinctCount", false)?,
+        null_count: b::optional_bool(v, "statisticsNullCount", true)?,
+        binary_statistics_truncate_length: v
+            .get("statisticsBinaryTruncateLength")
+            .map(|x| {
+                x.as_u64().ok_or_else(|| {
+                    EngineError::Invalid("'statisticsBinaryTruncateLength' must be unsigned".into())
+                })
+            })
+            .transpose()?,
+    })
+}
 fn temporary(path: &str) -> Result<NamedTempFile> {
     let parent = Path::new(path)
         .parent()
         .filter(|x| !x.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
-    Ok(NamedTempFile::new_in(parent)?)
+    let file = NamedTempFile::new_in(parent)?;
+    if let Ok(metadata) = std::fs::metadata(path) {
+        file.as_file().set_permissions(metadata.permissions())?;
+    }
+    Ok(file)
 }
 fn persist(file: NamedTempFile, path: &str) -> Result<()> {
     file.persist(path)
@@ -611,10 +680,39 @@ fn write_csv(v: &Value) -> Result<Value> {
         return Err(EngineError::Invalid("separator must be one byte".into()));
     }
     let mut f = temporary(p)?;
-    CsvWriter::new(f.as_file_mut())
+    let quote_style = match optional_string(v, "quoteStyle", "necessary")? {
+        "necessary" => QuoteStyle::Necessary,
+        "always" => QuoteStyle::Always,
+        "nonNumeric" => QuoteStyle::NonNumeric,
+        "never" => QuoteStyle::Never,
+        x => {
+            return Err(EngineError::Invalid(format!(
+                "invalid CSV quote style '{x}'"
+            )))
+        }
+    };
+    let mut writer = CsvWriter::new(f.as_file_mut())
         .include_header(b::optional_bool(v, "includeHeader", true)?)
+        .include_bom(b::optional_bool(v, "includeBom", false)?)
         .with_separator(sep.as_bytes()[0])
-        .finish(&mut df)?;
+        .with_batch_size(nonzero(v, "batchSize", 1024)?)
+        .with_date_format(string_opt(v, "dateFormat")?.map(Into::into))
+        .with_time_format(string_opt(v, "timeFormat")?.map(Into::into))
+        .with_datetime_format(string_opt(v, "datetimeFormat")?.map(Into::into))
+        .with_float_scientific(bool_opt(v, "floatScientific")?)
+        .with_float_precision(usize_value_opt(v, "floatPrecision")?)
+        .with_decimal_comma(b::optional_bool(v, "decimalComma", false)?)
+        .with_quote_char(byte(v, "quoteChar", b'"')?)
+        .with_null_value(optional_string(v, "nullValue", "")?.into())
+        .with_line_terminator(optional_string(v, "lineTerminator", "\n")?.into())
+        .with_quote_style(quote_style);
+    if let Some(n_threads) = usize_value_opt(v, "nThreads")? {
+        if n_threads == 0 {
+            return Err(EngineError::Invalid("'nThreads' must be positive".into()));
+        }
+        writer = writer.n_threads(n_threads);
+    }
+    writer.finish(&mut df)?;
     persist(f, p)?;
     Ok(json!({"path":p}))
 }
@@ -645,6 +743,10 @@ fn write_parquet(v: &Value) -> Result<Value> {
     let mut f = temporary(p)?;
     ParquetWriter::new(f.as_file_mut())
         .with_compression(compression)
+        .with_statistics(parquet_statistics(v)?)
+        .with_row_group_size(positive_usize_opt(v, "rowGroupSize")?)
+        .with_data_page_size(positive_usize_opt(v, "dataPageSize")?)
+        .set_parallel(b::optional_bool(v, "parallel", true)?)
         .finish(&mut df)?;
     persist(f, p)?;
     Ok(json!({"path":p}))
@@ -725,7 +827,7 @@ fn hello() -> Value {
         },
         "commands": {
             "core": ["hello", "runtimeDiagnostics"],
-            "frame": ["frameImport", "frameInfo", "frameExport", "frameLazy", "frameReadJson", "frameReadIpcStream", "frameWriteCsv", "frameWriteParquet", "frameWriteIpc", "frameWriteIpcStream", "frameWriteJson", "frameWriteNdjson", "frameColumn", "frameSelectColumns", "frameSelect", "frameFilter", "frameFilterMask", "frameWithColumns", "frameSort", "frameSlice", "frameReverse", "frameDrop", "frameRename"],
+            "frame": ["frameImport", "frameInfo", "frameExport", "frameLazy", "frameReadJson", "frameReadIpcStream", "frameWriteCsv", "frameWriteParquet", "frameWriteIpc", "frameWriteIpcStream", "frameWriteJson", "frameWriteNdjson", "frameColumn", "frameSelectColumns", "frameSelect", "frameFilter", "frameFilterMask", "frameWithColumns", "frameSort", "frameSlice", "frameReverse", "frameDistinct", "frameDropNulls", "frameExplode", "frameUnnest", "frameUnpivot", "frameTranspose", "frameDrop", "frameRename"],
             "series": ["seriesImport", "seriesInfo", "seriesExport", "seriesToFrame", "seriesRename", "seriesCast", "seriesSlice", "seriesReverse", "seriesSort", "seriesFilter", "seriesDropNulls", "seriesAppend", "seriesGather", "seriesUnique", "seriesBinary", "seriesAggregate"],
             "job": ["lazyCollect", "lazySubmit", "lazyProfile", "jobPoll", "jobCancel", "jobTake", "lazyBatchStream", "batchStreamPoll", "batchStreamCancel"],
             "expression": ["exprColumn", "exprLiteral", "exprLen", "exprAlias", "exprCast", "exprUnary", "exprBinary", "exprTernary", "exprAggregate", "exprFunction", "exprMeta", "exprOver"],
@@ -789,8 +891,8 @@ fn hello() -> Value {
                 "over": ["partitionBy", "orderBy", "mapping=groupsToRows|explode|join", "orderDescending", "orderNullsLast", "orderMaintainOrder", "orderMultithreaded"],
                 "scanCsv": ["path", "hasHeader", "separator", "skipRows", "nRows", "tryParseDates"],
                 "scanParquet": ["path", "nRows", "parallel"],
-                "writeCsv": ["path", "includeHeader", "separator"],
-                "writeParquet": ["path", "compression=none|uncompressed|snappy|gzip|brotli|zstd|lz4|lz4raw"],
+                "writeCsv": ["path", "includeHeader", "separator", "includeBom", "batchSize", "dateFormat", "timeFormat", "datetimeFormat", "floatScientific", "floatPrecision", "decimalComma", "quoteChar", "nullValue", "lineTerminator", "quoteStyle=necessary|always|nonNumeric|never", "nThreads=eagerOnly"],
+                "writeParquet": ["path", "compression=none|uncompressed|snappy|gzip|brotli|zstd|lz4|lz4raw", "rowGroupSize", "dataPageSize", "statisticsMin", "statisticsMax", "statisticsDistinctCount", "statisticsNullCount", "statisticsBinaryTruncateLength", "parallel=eagerOnly"],
                 "scanIpc": ["path", "nRows", "cache", "rechunk", "recordBatchStatistics"],
                 "scanNdjson": ["path", "nRows", "inferSchemaLength", "ignoreErrors", "lowMemory", "rechunk"],
                 "readJson": ["path", "inferSchemaLength", "batchSize", "rechunk"],

@@ -202,4 +202,90 @@ void main() {
     );
     expect(fake.requests, isEmpty);
   });
+
+  test(
+    'typed CSV and Parquet writer options preserve every protocol field',
+    () {
+      final fake = IoInvoker();
+      final polars = Polars.fromClient(ProtocolClient(fake));
+      final frame = polars.fromRecordBatchSync(
+        RecordBatch(ArrowSchema([ArrowField('x', ArrowIntegerType(32))]), [
+          ArrowArray(ArrowIntegerType(32), [ArrowIntegerValue(1)]),
+        ]),
+      );
+
+      frame.writeCsvSync(
+        'output.csv',
+        options: const CsvWriteOptions(
+          includeHeader: false,
+          separator: ';',
+          includeBom: true,
+          batchSize: 64,
+          floatScientific: true,
+          floatPrecision: 3,
+          quoteChar: "'",
+          nullValue: 'NA',
+          lineTerminator: '\r\n',
+          quoteStyle: CsvQuoteStyle.always,
+          nThreads: 2,
+        ),
+      );
+      frame.writeParquetSync(
+        'output.parquet',
+        options: const ParquetWriteOptions(
+          compression: ParquetCompression.snappy,
+          rowGroupSize: 100,
+          dataPageSize: 4096,
+          parallel: false,
+          statistics: ParquetStatisticsOptions(
+            distinctCount: true,
+            binaryTruncateLength: 32,
+          ),
+        ),
+      );
+
+      expect(fake.requests[1], containsPair('includeBom', true));
+      expect(fake.requests[1], containsPair('quoteStyle', 'always'));
+      expect(fake.requests[1], containsPair('nThreads', 2));
+      expect(fake.requests[2], containsPair('compression', 'snappy'));
+      expect(fake.requests[2], containsPair('rowGroupSize', 100));
+      expect(fake.requests[2], containsPair('dataPageSize', 4096));
+      expect(fake.requests[2], containsPair('statisticsDistinctCount', true));
+      expect(fake.requests[2], containsPair('parallel', false));
+      frame.close();
+    },
+  );
+
+  test('writer validation and legacy overrides happen before transport', () {
+    final fake = IoInvoker();
+    final polars = Polars.fromClient(ProtocolClient(fake));
+    final frame = polars.fromRecordBatchSync(
+      RecordBatch(ArrowSchema([ArrowField('x', ArrowIntegerType(32))]), [
+        ArrowArray(ArrowIntegerType(32), [ArrowIntegerValue(1)]),
+      ]),
+    );
+    final baseline = fake.requests.length;
+    expect(
+      () => frame.writeCsvSync(
+        'x.csv',
+        options: const CsvWriteOptions(decimalComma: true),
+      ),
+      throwsArgumentError,
+    );
+    expect(
+      () => frame.writeParquetSync('x.parquet', compression: 'invalid'),
+      throwsArgumentError,
+    );
+    expect(fake.requests, hasLength(baseline));
+
+    frame.writeCsvSync(
+      'x.csv',
+      includeHeader: false,
+      separator: '|',
+      options: const CsvWriteOptions(separator: ';'),
+    );
+    expect(fake.requests.last, containsPair('includeHeader', false));
+    expect(fake.requests.last, containsPair('separator', '|'));
+    frame.close();
+  });
 }

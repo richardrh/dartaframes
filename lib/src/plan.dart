@@ -627,30 +627,50 @@ final class LazyFrame {
 
   void writeCsvSync(
     String path, {
-    bool includeHeader = true,
-    String separator = ',',
+    bool? includeHeader,
+    String? separator,
+    CsvWriteOptions options = const CsvWriteOptions(),
   }) {
-    sinkCsvSync(path, includeHeader: includeHeader, separator: separator);
+    sinkCsvSync(
+      path,
+      includeHeader: includeHeader,
+      separator: separator,
+      csv: options,
+    );
   }
 
   /// Compatibility Future wrapper around the native lazy sink. Depending on
   /// the transport, native execution may still occur on the calling isolate.
   Future<void> writeCsv(
     String path, {
-    bool includeHeader = true,
-    String separator = ',',
+    bool? includeHeader,
+    String? separator,
+    CsvWriteOptions options = const CsvWriteOptions(),
   }) async {
-    writeCsvSync(path, includeHeader: includeHeader, separator: separator);
+    writeCsvSync(
+      path,
+      includeHeader: includeHeader,
+      separator: separator,
+      options: options,
+    );
   }
 
-  void writeParquetSync(String path, {String compression = 'zstd'}) {
-    sinkParquetSync(path, compression: compression);
+  void writeParquetSync(
+    String path, {
+    String? compression,
+    ParquetWriteOptions options = const ParquetWriteOptions(),
+  }) {
+    sinkParquetSync(path, compression: compression, parquet: options);
   }
 
   /// Compatibility Future wrapper around the native lazy sink. Depending on
   /// the transport, native execution may still occur on the calling isolate.
-  Future<void> writeParquet(String path, {String compression = 'zstd'}) async =>
-      writeParquetSync(path, compression: compression);
+  Future<void> writeParquet(
+    String path, {
+    String? compression,
+    ParquetWriteOptions options = const ParquetWriteOptions(),
+  }) async =>
+      writeParquetSync(path, compression: compression, options: options);
 }
 
 /// The materialized query result and Polars node timings (microseconds).
