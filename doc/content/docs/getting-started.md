@@ -53,6 +53,40 @@ final totals = polars
 Use `nRows` for a bounded scan and `parallel: false` when a workload requires a
 serial Parquet reader.
 
+## Read and write Excel workbooks
+
+Excel support is eager and limited to local OOXML `.xlsx` workbooks with one
+worksheet per call:
+
+```dart
+final input = polars.readExcelSync(
+  'people.xlsx',
+  options: const ExcelReadOptions(
+    worksheet: 'People',
+    hasHeader: true,
+    inferSchemaLength: null,
+  ),
+);
+
+input.writeExcelSync(
+  'people-copy.xlsx',
+  options: const ExcelWriteOptions(worksheet: 'People'),
+);
+```
+
+Omit `worksheet` when reading to select the first sheet. Supply `columnNames`
+to replace header or generated names. The default inference window is 100 data
+rows; null scans all rows. Empty cells become null, integer/float mixtures
+promote to float64, and date/datetime mixtures promote to datetime. Other mixed
+columns are rejected.
+
+Writing creates a new one-sheet workbook rather than editing an existing file.
+Existing output is replaced only after a complete temporary workbook is ready.
+Supported output types are null, boolean, exactly representable integers,
+finite floats, string, date, and timezone-free datetime. Nested, binary,
+decimal, duration, time, categorical, object, and timezone-aware columns are
+rejected explicitly.
+
 ## Arrow results
 
 `exportSync()` copies a frame into a pure Dart `RecordBatch` containing typed

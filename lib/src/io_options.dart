@@ -4,6 +4,58 @@ enum IpcCompression { none, lz4, zstd }
 
 enum CsvQuoteStyle { necessary, always, nonNumeric, never }
 
+/// Options for eagerly reading one worksheet from an `.xlsx` workbook.
+///
+/// When [worksheet] is null, the first worksheet is read. [columnNames]
+/// replaces inferred/header names; a header row is still consumed when
+/// [hasHeader] is true. The default inference boundary examines 100 data rows.
+/// Set [inferSchemaLength] to null to infer from every data row.
+final class ExcelReadOptions {
+  const ExcelReadOptions({
+    this.worksheet,
+    this.hasHeader = true,
+    this.columnNames,
+    this.inferSchemaLength = 100,
+  }) : assert(inferSchemaLength == null || inferSchemaLength > 0);
+
+  final String? worksheet;
+  final bool hasHeader;
+  final List<String>? columnNames;
+  final int? inferSchemaLength;
+
+  Map<String, Object?> _toJson() => {
+    if (worksheet != null) 'worksheet': worksheet,
+    'hasHeader': hasHeader,
+    if (columnNames != null) 'columnNames': columnNames,
+    'inferSchemaLength': inferSchemaLength,
+  };
+}
+
+/// Options for writing a new one-worksheet `.xlsx` workbook.
+///
+/// Existing output is replaced only after the complete workbook has been
+/// written successfully to a temporary file in the destination directory.
+final class ExcelWriteOptions {
+  const ExcelWriteOptions({
+    this.worksheet = 'Sheet1',
+    this.includeHeader = true,
+    this.dateFormat = 'yyyy-mm-dd',
+    this.datetimeFormat = 'yyyy-mm-dd hh:mm:ss.000',
+  });
+
+  final String worksheet;
+  final bool includeHeader;
+  final String dateFormat;
+  final String datetimeFormat;
+
+  Map<String, Object?> _toJson() => {
+    'worksheet': worksheet,
+    'includeHeader': includeHeader,
+    'dateFormat': dateFormat,
+    'datetimeFormat': datetimeFormat,
+  };
+}
+
 enum ParquetCompression {
   uncompressed,
   snappy,

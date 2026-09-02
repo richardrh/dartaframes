@@ -65,7 +65,7 @@ through `df_handle_release`.
 
 ## Closed command schemas
 
-The current registry contains 122 commands. The table lists every accepted
+The current registry contains 124 commands. The table lists every accepted
 command-specific field; `protocol` and `command` are always accepted and no
 other fields are. `?` means optional. Handle-valued fields use decimal strings.
 
@@ -81,9 +81,11 @@ other fields are. `?` means optional. Handle-valued fields use decimal strings.
 | frame | `frameInfo` | `frame` |
 | frame | `frameExport` | `frame` |
 | frame | `frameLazy` | `frame` |
+| frame | `frameReadExcel` | `path`, `worksheet?`, `hasHeader?`, `columnNames?`, `inferSchemaLength?` |
 | frame | `frameReadJson` | `path`, `inferSchemaLength?`, `batchSize?`, `rechunk?` |
 | frame | `frameReadIpcStream` | `path`, `nRows?`, `columns?`, `rechunk?` |
 | frame | `frameWriteCsv` | `frame`, `path`, `includeHeader?`, `separator?` |
+| frame | `frameWriteExcel` | `frame`, `path`, `worksheet?`, `includeHeader?`, `dateFormat?`, `datetimeFormat?` |
 | frame | `frameWriteParquet` | `frame`, `path`, `compression?` |
 | frame | `frameWriteIpc` | `frame`, `path`, `compression?`, `recordBatchSize?`, `parallel?`, `recordBatchStatistics?` |
 | frame | `frameWriteIpcStream` | `frame`, `path`, `compression?` |
@@ -305,6 +307,34 @@ one transaction. `ifExists` is required and is exactly `fail`, `replace`, or
 int64, uint8/16/32, uint64 values that fit int64, finite float32/64, string, and
 binary columns. Other Polars dtypes, non-finite floats, and zero-column frames are
 rejected rather than coerced.
+
+## XLSX workbooks
+
+`frameReadExcel` eagerly reads one worksheet from a local OOXML `.xlsx`
+workbook with `calamine`. `worksheet` selects a sheet; omission selects the
+first sheet. `hasHeader` defaults to true. Optional `columnNames` replace the
+header or generated `column_1`, `column_2`, ... names; when `hasHeader` is true
+the first row is still consumed. Names must be non-empty and unique.
+`inferSchemaLength` defaults to 100 data rows and must be positive; null scans
+all rows. Values outside a bounded inference window must conform to the inferred
+type or the read fails rather than silently widening.
+
+Empty cells map to null. Homogeneous bool, integer, float, string, date, and
+datetime columns map to boolean, int64, float64, string, date, and millisecond
+naive datetime. Integer/float mixtures promote to float64; date/datetime
+mixtures promote to datetime. Other mixed columns, cell errors, and durations
+are rejected explicitly.
+
+`frameWriteExcel` uses `rust_xlsxwriter` to create a new workbook containing one
+worksheet. It never edits or appends to an existing workbook. The complete file
+is written to a same-directory temporary file before replacing the destination,
+so validation or serialization failure leaves an existing destination intact.
+Supported columns are null, boolean, integer values in Excel's exact 53-bit
+numeric range, finite float32/64, string, date, and timezone-free datetime.
+Sub-millisecond datetime precision is truncated. Binary, decimal, time,
+duration, timezone-aware, categorical, object, and nested columns are rejected.
+`dateFormat` and `datetimeFormat` are Excel number formats and default to
+`yyyy-mm-dd` and `yyyy-mm-dd hh:mm:ss.000`.
 
 ## Responses, collection, and ownership
 

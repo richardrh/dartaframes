@@ -55,6 +55,9 @@ pub fn invoke(bytes: &[u8]) -> Result<Value> {
     if let Some(payload) = io_extended::dispatch(command, &r)? {
         return envelope(payload);
     }
+    if let Some(payload) = crate::xlsx::dispatch(command, &r)? {
+        return envelope(payload);
+    }
     if command.starts_with("selector") || command.starts_with("dtypeSelector") {
         return envelope(selectors::invoke(command, &r)?);
     }
@@ -866,7 +869,7 @@ fn hello() -> Value {
         },
         "commands": {
             "core": ["hello", "runtimeDiagnostics"],
-            "frame": ["frameImport", "frameInfo", "frameExport", "frameLazy", "frameReadJson", "frameReadIpcStream", "frameWriteCsv", "frameWriteParquet", "frameWriteIpc", "frameWriteIpcStream", "frameWriteJson", "frameWriteNdjson", "frameColumn", "frameSelectColumns", "frameSelect", "frameFilter", "frameFilterMask", "frameWithColumns", "frameSort", "frameSlice", "frameReverse", "frameDistinct", "frameDropNulls", "frameExplode", "frameUnnest", "frameUnpivot", "frameTranspose", "frameDrop", "frameRename"],
+            "frame": ["frameImport", "frameInfo", "frameExport", "frameLazy", "frameReadExcel", "frameReadJson", "frameReadIpcStream", "frameWriteCsv", "frameWriteExcel", "frameWriteParquet", "frameWriteIpc", "frameWriteIpcStream", "frameWriteJson", "frameWriteNdjson", "frameColumn", "frameSelectColumns", "frameSelect", "frameFilter", "frameFilterMask", "frameWithColumns", "frameSort", "frameSlice", "frameReverse", "frameDistinct", "frameDropNulls", "frameExplode", "frameUnnest", "frameUnpivot", "frameTranspose", "frameDrop", "frameRename"],
             "series": ["seriesImport", "seriesInfo", "seriesExport", "seriesToFrame", "seriesRename", "seriesCast", "seriesSlice", "seriesReverse", "seriesSort", "seriesFilter", "seriesDropNulls", "seriesAppend", "seriesGather", "seriesUnique", "seriesBinary", "seriesAggregate"],
             "job": ["lazyCollect", "lazySubmit", "lazyProfile", "jobPoll", "jobCancel", "jobTake", "lazyBatchStream", "batchStreamPoll", "batchStreamCancel"],
             "expression": ["exprColumn", "exprLiteral", "exprLen", "exprAlias", "exprCast", "exprUnary", "exprBinary", "exprTernary", "exprAggregate", "exprFunction", "exprMeta", "exprOver"],
@@ -939,6 +942,8 @@ fn hello() -> Value {
                 "scanNdjson": ["path", "nRows", "inferSchemaLength", "ignoreErrors", "lowMemory", "rechunk"],
                 "readJson": ["path", "inferSchemaLength", "batchSize", "rechunk"],
                 "readIpcStream": ["path", "nRows", "columns", "rechunk"],
+                "readExcel": ["path", "worksheet=first", "hasHeader", "columnNames", "inferSchemaLength=positive|null", "types=null|boolean|int64|float64|string|date|datetime-ms", "mixedColumns=reject"],
+                "writeExcel": ["path", "worksheet=Sheet1", "includeHeader", "dateFormat", "datetimeFormat", "newWorkbook", "oneWorksheet", "atomicReplace", "types=null|boolean|integer-exact53|float-finite|string|date|datetime-naive"],
                 "writeIpc": ["path", "compression=none|lz4|zstd", "recordBatchSize", "parallel", "recordBatchStatistics"],
                 "writeIpcStream": ["path", "compression=none|lz4|zstd"],
                 "writeJson": ["path", "format=json"],
@@ -1041,7 +1046,7 @@ mod tests {
             .values()
             .map(|commands| commands.as_array().unwrap().len())
             .sum();
-        assert_eq!(command_count, 122);
+        assert_eq!(command_count, 124);
         assert!(value["commands"]["expression"]
             .as_array()
             .unwrap()

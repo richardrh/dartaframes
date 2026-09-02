@@ -15,6 +15,8 @@
   DataFrame operations.
 - Added owned local SQLite connections with parameterized query/execute and
   transactional DataFrame writes.
+- Added native eager XLSX worksheet reading and writing with typed options,
+  schema inference, scalar/date round trips, and atomic local replacement.
 - Added dormant, checksum-pinned native-assets distribution support. Automatic
   native download remains disabled until reviewed release metadata is promoted.
 

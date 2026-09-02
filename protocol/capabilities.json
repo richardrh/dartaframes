@@ -60,7 +60,7 @@
   },
   "commands": {
     "core": ["hello", "runtimeDiagnostics"],
-    "frame": ["frameImport", "frameInfo", "frameExport", "frameLazy", "frameReadJson", "frameReadIpcStream", "frameWriteCsv", "frameWriteParquet", "frameWriteIpc", "frameWriteIpcStream", "frameWriteJson", "frameWriteNdjson", "frameColumn", "frameSelectColumns", "frameSelect", "frameFilter", "frameFilterMask", "frameWithColumns", "frameSort", "frameSlice", "frameReverse", "frameDistinct", "frameDropNulls", "frameExplode", "frameUnnest", "frameUnpivot", "frameTranspose", "frameDrop", "frameRename"],
+    "frame": ["frameImport", "frameInfo", "frameExport", "frameLazy", "frameReadExcel", "frameReadJson", "frameReadIpcStream", "frameWriteCsv", "frameWriteExcel", "frameWriteParquet", "frameWriteIpc", "frameWriteIpcStream", "frameWriteJson", "frameWriteNdjson", "frameColumn", "frameSelectColumns", "frameSelect", "frameFilter", "frameFilterMask", "frameWithColumns", "frameSort", "frameSlice", "frameReverse", "frameDistinct", "frameDropNulls", "frameExplode", "frameUnnest", "frameUnpivot", "frameTranspose", "frameDrop", "frameRename"],
     "series": ["seriesImport", "seriesInfo", "seriesExport", "seriesToFrame", "seriesRename", "seriesCast", "seriesSlice", "seriesReverse", "seriesSort", "seriesFilter", "seriesDropNulls", "seriesAppend", "seriesGather", "seriesUnique", "seriesBinary", "seriesAggregate"],
     "job": ["lazyCollect", "lazySubmit", "lazyProfile", "jobPoll", "jobCancel", "jobTake", "lazyBatchStream", "batchStreamPoll", "batchStreamCancel"],
     "expression": ["exprColumn", "exprLiteral", "exprLen", "exprAlias", "exprCast", "exprUnary", "exprBinary", "exprTernary", "exprAggregate", "exprFunction", "exprMeta", "exprOver"],
@@ -144,6 +144,8 @@
       "scanNdjson": ["path", "nRows", "inferSchemaLength", "ignoreErrors", "lowMemory", "rechunk"],
       "readJson": ["path", "inferSchemaLength", "batchSize", "rechunk"],
       "readIpcStream": ["path", "nRows", "columns", "rechunk"],
+      "readExcel": ["path", "worksheet=first", "hasHeader", "columnNames", "inferSchemaLength=positive|null", "types=null|boolean|int64|float64|string|date|datetime-ms", "mixedColumns=reject"],
+      "writeExcel": ["path", "worksheet=Sheet1", "includeHeader", "dateFormat", "datetimeFormat", "newWorkbook", "oneWorksheet", "atomicReplace", "types=null|boolean|integer-exact53|float-finite|string|date|datetime-naive"],
       "writeIpc": ["path", "compression=none|lz4|zstd", "recordBatchSize", "parallel", "recordBatchStatistics"],
       "writeIpcStream": ["path", "compression=none|lz4|zstd"],
       "writeJson": ["path", "format=json"],

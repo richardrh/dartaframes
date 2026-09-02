@@ -90,7 +90,8 @@ Bridge the two APIs with `frame.exportSync()` and
 
 ## Write files and use SQLite
 
-CSV and Parquet writers accept typed options on eager frames and lazy sinks:
+CSV and Parquet writers accept typed options on eager frames and lazy sinks.
+XLSX support is eager and creates or replaces one-worksheet workbooks:
 
 ```dart
 frame.writeCsvSync(
@@ -101,7 +102,20 @@ frame.writeParquetSync(
   'output.parquet',
   options: const ParquetWriteOptions(compression: ParquetCompression.zstd),
 );
+frame.writeExcelSync(
+  'output.xlsx',
+  options: const ExcelWriteOptions(worksheet: 'Results'),
+);
+final imported = polars.readExcelSync(
+  'output.xlsx',
+  options: const ExcelReadOptions(worksheet: 'Results'),
+);
 ```
+
+XLSX reads map empty/bool/integer/float/string/date/datetime cells to typed
+Polars columns and reject incompatible mixed columns. XLSX writes accept those
+same practical scalar families, reject nested or unsupported columns, and only
+replace the destination after a complete temporary workbook is written.
 
 SQLite is local, parameterized, native, and does not require Python:
 

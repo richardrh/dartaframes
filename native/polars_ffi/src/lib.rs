@@ -17,6 +17,7 @@ mod selectors;
 mod sql;
 mod sqlite;
 mod temporal_relational;
+mod xlsx;
 
 use std::{
     ffi::c_void,

@@ -42,9 +42,14 @@ void main() {
         0,
         (count, commands) => count + commands.length,
       ),
-      122,
+      124,
     );
     expect(hello.commands['expression'], contains('exprLen'));
+    expect(
+      hello.commands['frame'],
+      containsAll(['frameReadExcel', 'frameWriteExcel']),
+    );
+    expect(hello.operations['options'], contains('readExcel'));
     expect(
       (hello.operations['aggregate'] as List<Object?>),
       isNot(contains('len')),
