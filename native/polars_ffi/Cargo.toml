@@ -9,7 +9,12 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 base64 = "0.23"
+calamine = { version = "0.36.1", features = ["dates"] }
+chrono = "0.4"
+either = "1"
 parking_lot = "0.12"
+rusqlite = { version = "0.37", features = ["bundled"] }
+rust_xlsxwriter = { version = "0.99.0", features = ["chrono"] }
 polars = { version = "=0.55.2", default-features = false, features = [
   "lazy", "csv", "parquet", "dtype-full", "dtype-extension", "object",
   "strings", "regex", "temporal", "timezones", "true_div", "bitwise",

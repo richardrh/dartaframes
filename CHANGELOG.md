@@ -9,6 +9,14 @@
   bounded pull-based batch streaming.
 - Added explicit native handle ownership, collection jobs, cancellation, and
   capability discovery.
+- Added typed CSV and Parquet writer controls for eager frames and lazy sinks,
+  including atomic local replacement behavior.
+- Added eager distinct, null dropping, explode, unnest, unpivot, and transpose
+  DataFrame operations.
+- Added owned local SQLite connections with parameterized query/execute and
+  transactional DataFrame writes.
+- Added native eager XLSX worksheet reading and writing with typed options,
+  schema inference, scalar/date round trips, and atomic local replacement.
 - Added dormant, checksum-pinned native-assets distribution support. Automatic
   native download remains disabled until reviewed release metadata is promoted.
 

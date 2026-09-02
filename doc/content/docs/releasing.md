@@ -36,10 +36,11 @@ an unreviewed binary.
 6. Run `Prepare GitHub release` to validate Dart format/analyze, the publish
    archive, and downloaded draft assets and pins. Review and publish the GitHub
    draft manually.
-7. Only after assets are public, run clean consumer smoke tests on every
-   supported target so the promoted hook performs its normal unauthenticated
-   download and cache verification. Publish `dartaframes` to pub.dev
-   only after those post-public smokes pass.
+7. Only after assets are public, dispatch `Native consumer smoke` with the exact
+   version and tag. Its five native runners invoke `Polars.native()` without a
+   library path, forcing the promoted hook through its normal unauthenticated
+   download, checksum verification, cache, bundle, FFI, CSV, and Arrow C paths.
+   Publish `dartaframes` to pub.dev only after every matrix job passes.
 
 Neither workflow publishes the GitHub draft or pub package. Draft assets are
 not a valid simulation of the public consumer download path.

@@ -134,6 +134,75 @@ extension EagerDataFrameOperations on DataFrame {
   DataFrame tail([int length = 5]) => slice(-length, length);
   DataFrame reverse() => _frameInput('frameReverse');
 
+  DataFrame distinct({
+    Iterable<String>? subset,
+    String keep = 'first',
+    bool maintainOrder = false,
+  }) {
+    if (!{'first', 'last', 'any', 'none'}.contains(keep)) {
+      throw ArgumentError.value(keep, 'keep', 'unsupported keep mode');
+    }
+    final names = subset == null ? null : _validatedNames(subset, 'subset');
+    return _frameInput('frameDistinct', {
+      if (names != null) 'subset': names,
+      'keep': keep,
+      'maintainOrder': maintainOrder,
+    });
+  }
+
+  DataFrame dropNulls({Iterable<String>? subset}) => _frameInput(
+    'frameDropNulls',
+    {if (subset != null) 'subset': _validatedNames(subset, 'subset')},
+  );
+
+  DataFrame explode(Iterable<String> columns) => _frameInput('frameExplode', {
+    'columns': _validatedNames(columns, 'columns'),
+    'emptyAsNull': true,
+    'keepNulls': true,
+  });
+
+  DataFrame unnest(Iterable<String> columns) => _frameInput('frameUnnest', {
+    'columns': _validatedNames(columns, 'columns'),
+  });
+
+  DataFrame unpivot({
+    Iterable<String>? on,
+    Iterable<String> index = const [],
+    String? variableName,
+    String? valueName,
+  }) {
+    final onNames = on == null ? null : _validatedNames(on, 'on');
+    final indexNames = List<String>.unmodifiable(index);
+    if (indexNames.any((name) => name.isEmpty)) {
+      throw ArgumentError.value(index, 'index', 'must contain non-empty names');
+    }
+    if (variableName != null) _validateName(variableName, 'variableName');
+    if (valueName != null) _validateName(valueName, 'valueName');
+    return _frameInput('frameUnpivot', {
+      if (onNames != null) 'on': onNames,
+      'index': indexNames,
+      if (variableName != null) 'variableName': variableName,
+      if (valueName != null) 'valueName': valueName,
+    });
+  }
+
+  /// Transposes rows and columns. This is an expensive operation.
+  DataFrame transpose({
+    bool includeHeader = false,
+    String headerName = 'column',
+    Iterable<String>? columnNames,
+  }) {
+    if (includeHeader) _validateName(headerName, 'headerName');
+    final names = columnNames == null
+        ? null
+        : _validatedNames(columnNames, 'columnNames');
+    return _frameInput('frameTranspose', {
+      'includeHeader': includeHeader,
+      'headerName': headerName,
+      if (names != null) 'columnNames': names,
+    });
+  }
+
   DataFrame drop(Iterable<String> columns, {bool strict = true}) => _frameInput(
     'frameDrop',
     {'columns': _validatedNames(columns, 'columns'), 'strict': strict},

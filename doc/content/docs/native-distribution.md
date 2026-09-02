@@ -114,6 +114,12 @@ The `hooks.user_defines.dartaframes` map accepts:
 
 Once activated, consumers use the default asset with `Polars.native()`.
 
+The native library is not stored inside the pub archive. The pub.dev package
+contains the native-assets hook and reviewed target-specific checksums. During a
+consumer build, Dart runs the hook, downloads the matching public GitHub Release
+asset once, verifies it, caches it, and bundles it into the application. This
+keeps the Dart package small while preserving automatic installation.
+
 ## Export control
 
 `native/exports/` defines the intended ABI-2 exports for ELF, Mach-O, and

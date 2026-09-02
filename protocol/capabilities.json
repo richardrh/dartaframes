@@ -42,7 +42,7 @@
     {"kind":"extension","descriptor":true,"literal":false,"import":false,"export":false,"cast":false,"kernels":false},
     {"kind":"unknown","descriptor":true,"literal":false,"import":false,"export":false,"cast":false,"kernels":false}
   ],
-  "resources": ["expr", "selector", "dtypeSelector", "lazyFrame", "frame", "series", "job", "sqlContext", "batchStream"],
+  "resources": ["expr", "selector", "dtypeSelector", "lazyFrame", "frame", "series", "job", "sqlContext", "batchStream", "databaseConnection"],
   "interchange": {
     "arrowCDataVersion": 1,
     "arrowCStreamVersion": 1,
@@ -60,13 +60,14 @@
   },
   "commands": {
     "core": ["hello", "runtimeDiagnostics"],
-    "frame": ["frameImport", "frameInfo", "frameExport", "frameLazy", "frameReadJson", "frameReadIpcStream", "frameWriteCsv", "frameWriteParquet", "frameWriteIpc", "frameWriteIpcStream", "frameWriteJson", "frameWriteNdjson", "frameColumn", "frameSelectColumns", "frameSelect", "frameFilter", "frameFilterMask", "frameWithColumns", "frameSort", "frameSlice", "frameReverse", "frameDrop", "frameRename"],
+    "frame": ["frameImport", "frameInfo", "frameExport", "frameLazy", "frameReadExcel", "frameReadJson", "frameReadIpcStream", "frameWriteCsv", "frameWriteExcel", "frameWriteParquet", "frameWriteIpc", "frameWriteIpcStream", "frameWriteJson", "frameWriteNdjson", "frameColumn", "frameSelectColumns", "frameSelect", "frameFilter", "frameFilterMask", "frameWithColumns", "frameSort", "frameSlice", "frameReverse", "frameDistinct", "frameDropNulls", "frameExplode", "frameUnnest", "frameUnpivot", "frameTranspose", "frameDrop", "frameRename"],
     "series": ["seriesImport", "seriesInfo", "seriesExport", "seriesToFrame", "seriesRename", "seriesCast", "seriesSlice", "seriesReverse", "seriesSort", "seriesFilter", "seriesDropNulls", "seriesAppend", "seriesGather", "seriesUnique", "seriesBinary", "seriesAggregate"],
     "job": ["lazyCollect", "lazySubmit", "lazyProfile", "jobPoll", "jobCancel", "jobTake", "lazyBatchStream", "batchStreamPoll", "batchStreamCancel"],
     "expression": ["exprColumn", "exprLiteral", "exprLen", "exprAlias", "exprCast", "exprUnary", "exprBinary", "exprTernary", "exprAggregate", "exprFunction", "exprMeta", "exprOver"],
     "selector": ["selectorAll", "selectorEmpty", "selectorByName", "selectorByIndex", "selectorMatches", "selectorBinary", "selectorNot", "selectorAsExpr"],
     "dtypeSelector": ["dtypeSelectorCreate", "dtypeSelectorBinary", "dtypeSelectorNot", "dtypeSelectorAsSelector", "dtypeSelectorMatches"],
     "sql": ["sqlContextNew", "sqlContextRegister", "sqlContextRegisterAll", "sqlContextUnregister", "sqlContextTables", "sqlContextExecute"],
+    "database": ["databaseConnectionOpenSqlite", "databaseConnectionQuery", "databaseConnectionExecute", "databaseConnectionWriteFrame"],
     "lazy": ["lazyScanCsv", "lazyScanParquet", "lazyScanIpc", "lazyScanNdjson", "lazySinkCsv", "lazySinkParquet", "lazySinkIpc", "lazySinkNdjson", "lazySelect", "lazySelectInputs", "lazyFilter", "lazyWithColumns", "lazyWithColumnsInputs", "lazySort", "lazySlice", "lazyGroupBy", "lazyGroupByDynamic", "lazyGroupByRolling", "lazyJoin", "lazyJoinAsOf", "lazyJoinWhere", "lazyDistinct", "lazyDropNulls", "lazyDrop", "lazyRename", "lazyExplode", "lazyUnnest", "lazyUnpivot", "lazyConcat", "lazySchema", "lazyExplain"]
   },
   "operations": {
@@ -82,6 +83,7 @@
     "qualifiedFunctions": ["str.lenBytes", "str.lenChars", "str.toLowercase", "str.toUppercase", "str.contains", "str.startsWith", "str.endsWith", "str.find", "str.extract", "str.extractAll", "str.split", "str.replace", "str.stripChars", "str.stripCharsStart", "str.stripCharsEnd", "str.stripPrefix", "str.stripSuffix", "str.slice", "str.head", "str.tail", "str.padStart", "str.padEnd", "str.zfill", "str.toDate", "str.toTime", "str.toDatetime", "dt.year", "dt.isoYear", "dt.month", "dt.day", "dt.ordinalDay", "dt.weekday", "dt.week", "dt.quarter", "dt.hour", "dt.minute", "dt.second", "dt.millisecond", "dt.microsecond", "dt.nanosecond", "dt.date", "dt.time", "dt.timestamp", "dt.format", "dt.truncate", "dt.round", "dt.offsetBy", "dt.convertTimeZone", "dt.baseUtcOffset", "dt.dstOffset", "list.len", "list.first", "list.last", "list.sum", "list.min", "list.max", "list.mean", "list.get", "list.contains", "list.sort", "list.slice", "arr.len", "arr.sum", "arr.min", "arr.max", "arr.mean", "arr.toList", "arr.get", "arr.contains", "arr.sort", "arr.explode", "struct.field", "struct.fieldAt", "struct.renameFields", "struct.jsonEncode", "bin.sizeBytes", "bin.contains", "bin.startsWith", "bin.endsWith", "bin.hexEncode", "bin.base64Encode", "cat.physical", "cat.categories", "name.keep", "name.prefix", "name.suffix", "name.toLowercase", "name.toUppercase", "meta.undoAliases"],
     "expressionMetadata": ["rootNames", "outputName", "isColumn", "isColumnSelection", "isLiteral", "hasMultipleOutputs", "isRegexProjection"],
     "options": {
+      "sqlite": ["bundled", "localFilesystemOnly", "positionalScalarParameters", "ifExists=fail|replace|append", "maxParameters=10000", "maxQueryRows=10000000"],
       "cast": ["strict"],
       "std": ["ddof"],
       "variance": ["ddof"],
@@ -132,15 +134,18 @@
       "explode": ["columns", "emptyAsNull=true", "keepNulls=true"],
       "unnest": ["columns"],
       "unpivot": ["on", "index", "variableName", "valueName"],
+      "transpose": ["includeHeader", "headerName", "columnNames"],
       "over": ["partitionBy", "orderBy", "mapping=groupsToRows|explode|join", "orderDescending", "orderNullsLast", "orderMaintainOrder", "orderMultithreaded"],
       "scanCsv": ["path", "hasHeader", "separator", "skipRows", "nRows", "tryParseDates"],
       "scanParquet": ["path", "nRows", "parallel"],
-      "writeCsv": ["path", "includeHeader", "separator"],
-      "writeParquet": ["path", "compression=none|uncompressed|snappy|gzip|brotli|zstd|lz4|lz4raw"],
+      "writeCsv": ["path", "includeHeader", "separator", "includeBom", "batchSize", "dateFormat", "timeFormat", "datetimeFormat", "floatScientific", "floatPrecision", "decimalComma", "quoteChar", "nullValue", "lineTerminator", "quoteStyle=necessary|always|nonNumeric|never", "nThreads=eagerOnly"],
+      "writeParquet": ["path", "compression=none|uncompressed|snappy|gzip|brotli|zstd|lz4|lz4raw", "rowGroupSize", "dataPageSize", "statisticsMin", "statisticsMax", "statisticsDistinctCount", "statisticsNullCount", "statisticsBinaryTruncateLength", "parallel=eagerOnly"],
       "scanIpc": ["path", "nRows", "cache", "rechunk", "recordBatchStatistics"],
       "scanNdjson": ["path", "nRows", "inferSchemaLength", "ignoreErrors", "lowMemory", "rechunk"],
       "readJson": ["path", "inferSchemaLength", "batchSize", "rechunk"],
       "readIpcStream": ["path", "nRows", "columns", "rechunk"],
+      "readExcel": ["path", "worksheet=first", "hasHeader", "columnNames", "inferSchemaLength=positive|null", "types=null|boolean|int64|float64|string|date|datetime-ms", "mixedColumns=reject"],
+      "writeExcel": ["path", "worksheet=Sheet1", "includeHeader", "dateFormat", "datetimeFormat", "newWorkbook", "oneWorksheet", "atomicReplace", "types=null|boolean|integer-exact53|float-finite|string|date|datetime-naive"],
       "writeIpc": ["path", "compression=none|lz4|zstd", "recordBatchSize", "parallel", "recordBatchStatistics"],
       "writeIpcStream": ["path", "compression=none|lz4|zstd"],
       "writeJson": ["path", "format=json"],

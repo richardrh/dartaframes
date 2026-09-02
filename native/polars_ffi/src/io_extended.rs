@@ -67,7 +67,11 @@ fn temporary(path: &str) -> Result<NamedTempFile> {
         .parent()
         .filter(|x| !x.as_os_str().is_empty())
         .unwrap_or_else(|| Path::new("."));
-    Ok(NamedTempFile::new_in(parent)?)
+    let file = NamedTempFile::new_in(parent)?;
+    if let Ok(metadata) = std::fs::metadata(path) {
+        file.as_file().set_permissions(metadata.permissions())?;
+    }
+    Ok(file)
 }
 
 fn persist(file: NamedTempFile, path: &str) -> Result<()> {
@@ -116,6 +120,40 @@ fn parquet_compression(v: &Value) -> Result<ParquetCompression> {
                 "Parquet compression '{value}'"
             )))
         }
+    })
+}
+
+fn string_opt<'a>(v: &'a Value, key: &str) -> Result<Option<&'a str>> {
+    v.get(key)
+        .map(|x| {
+            x.as_str()
+                .ok_or_else(|| EngineError::Invalid(format!("'{key}' must be a string")))
+        })
+        .transpose()
+}
+
+fn byte(v: &Value, key: &str, default: u8) -> Result<u8> {
+    match string_opt(v, key)? {
+        None => Ok(default),
+        Some(value) if value.as_bytes().len() == 1 => Ok(value.as_bytes()[0]),
+        Some(_) => Err(EngineError::Invalid(format!("'{key}' must be one byte"))),
+    }
+}
+
+fn parquet_statistics(v: &Value) -> Result<StatisticsOptions> {
+    Ok(StatisticsOptions {
+        min_value: b::optional_bool(v, "statisticsMin", true)?,
+        max_value: b::optional_bool(v, "statisticsMax", true)?,
+        distinct_count: b::optional_bool(v, "statisticsDistinctCount", false)?,
+        null_count: b::optional_bool(v, "statisticsNullCount", true)?,
+        binary_statistics_truncate_length: v
+            .get("statisticsBinaryTruncateLength")
+            .map(|x| {
+                x.as_u64().ok_or_else(|| {
+                    EngineError::Invalid("'statisticsBinaryTruncateLength' must be unsigned".into())
+                })
+            })
+            .transpose()?,
     })
 }
 
@@ -230,15 +268,49 @@ fn sink(v: &Value, format: &str) -> Result<Value> {
                 return Err(EngineError::Invalid("separator must be one byte".into()));
             }
             let mut options = CsvWriterOptions {
+                include_bom: b::optional_bool(v, "includeBom", false)?,
                 include_header: b::optional_bool(v, "includeHeader", true)?,
+                batch_size: nonzero_opt(v, "batchSize")?
+                    .unwrap_or(NonZeroUsize::new(1024).unwrap()),
                 ..Default::default()
             };
-            Arc::make_mut(&mut options.serialize_options).separator = separator.as_bytes()[0];
+            let serialize = Arc::make_mut(&mut options.serialize_options);
+            serialize.separator = separator.as_bytes()[0];
+            serialize.date_format = string_opt(v, "dateFormat")?.map(Into::into);
+            serialize.time_format = string_opt(v, "timeFormat")?.map(Into::into);
+            serialize.datetime_format = string_opt(v, "datetimeFormat")?.map(Into::into);
+            serialize.float_scientific = v
+                .get("floatScientific")
+                .map(|x| {
+                    x.as_bool().ok_or_else(|| {
+                        EngineError::Invalid("'floatScientific' must be a boolean".into())
+                    })
+                })
+                .transpose()?;
+            serialize.float_precision = usize_opt(v, "floatPrecision")?;
+            serialize.decimal_comma = b::optional_bool(v, "decimalComma", false)?;
+            serialize.quote_char = byte(v, "quoteChar", b'"')?;
+            serialize.null = string_opt(v, "nullValue")?.unwrap_or("").into();
+            serialize.line_terminator = string_opt(v, "lineTerminator")?.unwrap_or("\n").into();
+            serialize.quote_style = match string_opt(v, "quoteStyle")?.unwrap_or("necessary") {
+                "necessary" => QuoteStyle::Necessary,
+                "always" => QuoteStyle::Always,
+                "nonNumeric" => QuoteStyle::NonNumeric,
+                "never" => QuoteStyle::Never,
+                x => {
+                    return Err(EngineError::Invalid(format!(
+                        "invalid CSV quote style '{x}'"
+                    )))
+                }
+            };
             FileWriteFormat::Csv(options)
         }
         "parquet" => {
             let options = ParquetWriteOptions {
                 compression: parquet_compression(v)?,
+                statistics: parquet_statistics(v)?,
+                row_group_size: nonzero_opt(v, "rowGroupSize")?.map(|x| x.get()),
+                data_page_size: nonzero_opt(v, "dataPageSize")?.map(|x| x.get()),
                 ..Default::default()
             };
             FileWriteFormat::Parquet(Arc::new(options))
@@ -334,12 +406,39 @@ pub fn dispatch(command: &str, v: &Value) -> Result<Option<Value>> {
                     "includeHeader",
                     "separator",
                     "maintainOrder",
+                    "includeBom",
+                    "batchSize",
+                    "dateFormat",
+                    "timeFormat",
+                    "datetimeFormat",
+                    "floatScientific",
+                    "floatPrecision",
+                    "decimalComma",
+                    "quoteChar",
+                    "nullValue",
+                    "lineTerminator",
+                    "quoteStyle",
                 ],
             )?;
             sink(v, "csv")?
         }
         "lazySinkParquet" => {
-            fields(v, &["input", "path", "compression", "maintainOrder"])?;
+            fields(
+                v,
+                &[
+                    "input",
+                    "path",
+                    "compression",
+                    "maintainOrder",
+                    "rowGroupSize",
+                    "dataPageSize",
+                    "statisticsMin",
+                    "statisticsMax",
+                    "statisticsDistinctCount",
+                    "statisticsNullCount",
+                    "statisticsBinaryTruncateLength",
+                ],
+            )?;
             sink(v, "parquet")?
         }
         "lazySinkIpc" => {
@@ -381,5 +480,24 @@ mod tests {
             &json!({"protocol":2,"command":"lazyScanIpc","path":"x.ipc","cloud":true})
         )
         .is_err());
+    }
+
+    #[test]
+    fn parquet_statistics_and_csv_bytes_are_validated() {
+        let statistics = parquet_statistics(&json!({
+            "statisticsMin": false,
+            "statisticsDistinctCount": true,
+            "statisticsBinaryTruncateLength": 16
+        }))
+        .unwrap();
+        assert!(!statistics.min_value);
+        assert!(statistics.distinct_count);
+        assert_eq!(statistics.binary_statistics_truncate_length, Some(16));
+        assert_eq!(
+            byte(&json!({"quoteChar":"'"}), "quoteChar", b'"').unwrap(),
+            b'\''
+        );
+        assert!(byte(&json!({"quoteChar":"é"}), "quoteChar", b'"').is_err());
+        assert!(nonzero_opt(&json!({"rowGroupSize":0}), "rowGroupSize").is_err());
     }
 }

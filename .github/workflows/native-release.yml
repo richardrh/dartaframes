@@ -209,12 +209,9 @@ jobs:
           with open(sys.argv[2], "a", encoding="utf-8") as environment:
               environment.write(f"DARTAFRAMES_NATIVE_LIBRARY={library}\n")
           PY
-      - name: Run native Dart E2E
+      - name: Run complete Dart suite against the release library
         shell: bash
-        run: >-
-          dart test --reporter expanded
-          test/native_integration_test.dart
-          test/io_relational_native_test.dart
+        run: dart test --reporter expanded
       - name: Package and verify raw and archive assets
         shell: bash
         env:

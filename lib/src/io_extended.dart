@@ -1,6 +1,35 @@
 part of 'polars.dart';
 
 extension LocalIoPolars on Polars {
+  /// Eagerly reads one worksheet from a local OOXML `.xlsx` workbook.
+  DataFrame readExcelSync(
+    String path, {
+    ExcelReadOptions options = const ExcelReadOptions(),
+  }) {
+    _validateExcelRead(path, options);
+    return _adoptFrame(
+      _client.invokeSync('frameReadExcel', {
+        'path': path,
+        ...options._toJson(),
+      }),
+    );
+  }
+
+  /// Future convenience API for [readExcelSync]. Native invocation may still
+  /// execute on the calling isolate.
+  Future<DataFrame> readExcel(
+    String path, {
+    ExcelReadOptions options = const ExcelReadOptions(),
+  }) async {
+    _validateExcelRead(path, options);
+    return _adoptFrame(
+      await _client.invoke('frameReadExcel', {
+        'path': path,
+        ...options._toJson(),
+      }),
+    );
+  }
+
   LazyFrame scanIpc(
     String path, {
     IpcScanOptions options = const IpcScanOptions(),
@@ -132,6 +161,26 @@ extension LocalIoDataFrame on DataFrame {
     }
   }
 
+  /// Writes this frame as a new local OOXML `.xlsx` workbook containing one
+  /// worksheet. A successful write atomically replaces an existing output.
+  void writeExcelSync(
+    String path, {
+    ExcelWriteOptions options = const ExcelWriteOptions(),
+  }) {
+    _validateExcelWrite(path, options);
+    _writeLocalSync('frameWriteExcel', path, options._toJson());
+  }
+
+  /// Future convenience API for [writeExcelSync]. Native invocation may still
+  /// execute on the calling isolate.
+  Future<void> writeExcel(
+    String path, {
+    ExcelWriteOptions options = const ExcelWriteOptions(),
+  }) {
+    _validateExcelWrite(path, options);
+    return _writeLocal('frameWriteExcel', path, options._toJson());
+  }
+
   void writeIpcSync(
     String path, {
     IpcWriteOptions options = const IpcWriteOptions(),
@@ -178,6 +227,41 @@ extension LocalIoDataFrame on DataFrame {
       _writeLocal('frameWriteNdjson', path, const {});
 }
 
+void _validateExcelRead(String path, ExcelReadOptions options) {
+  _validateLocalPath(path);
+  final worksheet = options.worksheet;
+  if (worksheet != null) _validateName(worksheet, 'options.worksheet');
+  _validatePositive(options.inferSchemaLength, 'options.inferSchemaLength');
+  final names = options.columnNames;
+  if (names != null) {
+    if (names.isEmpty) {
+      throw ArgumentError.value(
+        names,
+        'options.columnNames',
+        'must not be empty',
+      );
+    }
+    final unique = <String>{};
+    for (final name in names) {
+      _validateName(name, 'options.columnNames');
+      if (!unique.add(name)) {
+        throw ArgumentError.value(
+          names,
+          'options.columnNames',
+          'must contain unique names',
+        );
+      }
+    }
+  }
+}
+
+void _validateExcelWrite(String path, ExcelWriteOptions options) {
+  _validateLocalPath(path);
+  _validateName(options.worksheet, 'options.worksheet');
+  _validateName(options.dateFormat, 'options.dateFormat');
+  _validateName(options.datetimeFormat, 'options.datetimeFormat');
+}
+
 extension LocalIoLazyFrame on LazyFrame {
   void _sinkLocalSync(
     String command,
@@ -200,45 +284,58 @@ extension LocalIoLazyFrame on LazyFrame {
   /// Executes a native streaming CSV sink synchronously on the calling isolate.
   void sinkCsvSync(
     String path, {
-    bool includeHeader = true,
-    String separator = ',',
+    bool? includeHeader,
+    String? separator,
+    CsvWriteOptions csv = const CsvWriteOptions(),
     LazySinkOptions options = const LazySinkOptions(),
   }) {
-    _validateSeparator(separator);
     _sinkLocalSync('lazySinkCsv', path, {
-      'includeHeader': includeHeader,
-      'separator': separator,
+      ..._csvWriteOptions(
+        csv,
+        includeHeader: includeHeader,
+        separator: separator,
+        eager: false,
+      ),
       ...options._toJson(),
     });
   }
 
   void sinkCsv(
     String path, {
-    bool includeHeader = true,
-    String separator = ',',
+    bool? includeHeader,
+    String? separator,
+    CsvWriteOptions csv = const CsvWriteOptions(),
     LazySinkOptions options = const LazySinkOptions(),
   }) => sinkCsvSync(
     path,
     includeHeader: includeHeader,
     separator: separator,
+    csv: csv,
     options: options,
   );
 
   /// Executes a native streaming Parquet sink synchronously.
   void sinkParquetSync(
     String path, {
-    String compression = 'zstd',
+    String? compression,
+    ParquetWriteOptions parquet = const ParquetWriteOptions(),
     LazySinkOptions options = const LazySinkOptions(),
   }) => _sinkLocalSync('lazySinkParquet', path, {
-    'compression': compression,
+    ..._parquetWriteOptions(parquet, compression: compression, eager: false),
     ...options._toJson(),
   });
 
   void sinkParquet(
     String path, {
-    String compression = 'zstd',
+    String? compression,
+    ParquetWriteOptions parquet = const ParquetWriteOptions(),
     LazySinkOptions options = const LazySinkOptions(),
-  }) => sinkParquetSync(path, compression: compression, options: options);
+  }) => sinkParquetSync(
+    path,
+    compression: compression,
+    parquet: parquet,
+    options: options,
+  );
 
   /// Executes a native streaming IPC/Feather file sink synchronously.
   void sinkIpcSync(

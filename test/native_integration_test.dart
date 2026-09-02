@@ -35,15 +35,21 @@ void main() {
       'job',
       'sqlContext',
       'batchStream',
+      'databaseConnection',
     ]);
     expect(
       hello.commands.values.cast<List<Object?>>().fold<int>(
         0,
         (count, commands) => count + commands.length,
       ),
-      112,
+      124,
     );
     expect(hello.commands['expression'], contains('exprLen'));
+    expect(
+      hello.commands['frame'],
+      containsAll(['frameReadExcel', 'frameWriteExcel']),
+    );
+    expect(hello.operations['options'], contains('readExcel'));
     expect(
       (hello.operations['aggregate'] as List<Object?>),
       isNot(contains('len')),
@@ -53,6 +59,52 @@ void main() {
     expect(hello.interchange['unknownNullCount'], isFalse);
     expect(hello.operations['asyncJobEngines'], ['auto']);
     expect(hello.operations['maxActiveJobs'], 64);
+  }, skip: skipNative);
+
+  test('SQLite executes parameters and round-trips DataFrames', () {
+    final directory = Directory.systemTemp.createTempSync(
+      'dartaframes-sqlite-',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final database = polars.openSqlite('${directory.path}/people.db');
+    addTearDown(database.close);
+
+    expect(
+      database.executeSync(
+        'CREATE TABLE people (id INTEGER, name TEXT, score REAL)',
+      ),
+      0,
+    );
+    expect(
+      database.executeSync(
+        'INSERT INTO people VALUES (?1, ?2, ?3)',
+        parameters: [1, 'Ada', 9.5],
+      ),
+      1,
+    );
+    final selected = database.querySync(
+      'SELECT id, name, score FROM people WHERE id = ?1',
+      parameters: [1],
+    );
+    addTearDown(selected.close);
+    expect(selected.shapeSync(), (1, 3));
+
+    expect(database.writeFrameSync(selected, 'copied'), 1);
+    expect(
+      database.writeFrameSync(
+        selected,
+        'copied',
+        ifExists: DatabaseIfExists.append,
+      ),
+      1,
+    );
+    final count = database.querySync('SELECT count(*) AS count FROM copied');
+    addTearDown(count.close);
+    final exported = count.exportSync();
+    expect(
+      (exported.columns.single.values.single as ArrowIntegerValue).value,
+      BigInt.from(2),
+    );
   }, skip: skipNative);
 
   test('selectors and SQL execute native lazy plans end to end', () {
@@ -415,8 +467,26 @@ void main() {
     addTearDown(() => directory.deleteSync(recursive: true));
     final csvPath = '${directory.path}/frame.csv';
     final parquetPath = '${directory.path}/frame.parquet';
-    source.writeCsvSync(csvPath, separator: ';');
-    source.writeParquetSync(parquetPath, compression: 'snappy');
+    source.writeCsvSync(
+      csvPath,
+      options: const CsvWriteOptions(
+        separator: ';',
+        includeBom: true,
+        batchSize: 2,
+        quoteStyle: CsvQuoteStyle.always,
+        nThreads: 1,
+      ),
+    );
+    source.writeParquetSync(
+      parquetPath,
+      options: const ParquetWriteOptions(
+        compression: ParquetCompression.snappy,
+        rowGroupSize: 2,
+        dataPageSize: 1024,
+        parallel: false,
+        statistics: ParquetStatisticsOptions(distinctCount: true),
+      ),
+    );
 
     final csv = polars.scanCsv(csvPath, separator: ';').collectSync();
     addTearDown(csv.close);
@@ -425,6 +495,33 @@ void main() {
     final parquet = polars.scanParquet(parquetPath).collectSync();
     addTearDown(parquet.close);
     expect(_integers(parquet.exportSync().columns[1]), [10, 20, 30]);
+
+    final lazyCsvPath = '${directory.path}/lazy.csv';
+    final lazyParquetPath = '${directory.path}/lazy.parquet';
+    final lazy = source.lazy();
+    addTearDown(lazy.close);
+    lazy.sinkCsvSync(
+      lazyCsvPath,
+      csv: const CsvWriteOptions(
+        separator: '|',
+        nullValue: 'NA',
+        lineTerminator: '\r\n',
+      ),
+    );
+    lazy.sinkParquetSync(
+      lazyParquetPath,
+      parquet: const ParquetWriteOptions(
+        rowGroupSize: 1,
+        dataPageSize: 512,
+        statistics: ParquetStatisticsOptions(minValue: false),
+      ),
+    );
+    final lazyCsv = polars.scanCsv(lazyCsvPath, separator: '|').collectSync();
+    final lazyParquet = polars.scanParquet(lazyParquetPath).collectSync();
+    addTearDown(lazyCsv.close);
+    addTearDown(lazyParquet.close);
+    expect(lazyCsv.shapeSync(), (3, 2));
+    expect(_integers(lazyParquet.exportSync().columns[1]), [10, 20, 30]);
   }, skip: skipNative);
 
   test('numeric functions preserve null, NaN, and infinity semantics', () {
@@ -598,10 +695,36 @@ void main() {
     addTearDown(source.close);
     expect(
       () => source.writeParquetSync(path, compression: 'invalid'),
-      throwsA(isA<PolarsException>()),
+      throwsArgumentError,
     );
     expect(File(path).readAsStringSync(), 'preserve-me');
   }, skip: skipNative);
+
+  test(
+    'successful atomic replacement preserves destination permissions',
+    () {
+      final directory = Directory.systemTemp.createTempSync(
+        'dartaframes-permissions-',
+      );
+      addTearDown(() => directory.deleteSync(recursive: true));
+      final path = '${directory.path}/output.csv';
+      final destination = File(path)..writeAsStringSync('old');
+      Process.runSync('chmod', ['640', path]);
+      final before = destination.statSync().mode & 0x1ff;
+      final source = polars.fromRecordBatchSync(
+        RecordBatch(ArrowSchema([ArrowField('x', ArrowIntegerType(32))]), [
+          ArrowArray(ArrowIntegerType(32), [ArrowIntegerValue(1)]),
+        ]),
+      );
+      addTearDown(source.close);
+      source.writeCsvSync(path);
+      expect(destination.statSync().mode & 0x1ff, before);
+      expect(destination.readAsStringSync(), contains('x'));
+    },
+    skip: Platform.isWindows
+        ? 'POSIX file permissions are unavailable'
+        : skipNative,
+  );
 }
 
 List<int?> _integers(ArrowArray array) => array.values

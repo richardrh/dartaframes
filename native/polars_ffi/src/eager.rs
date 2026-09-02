@@ -3,6 +3,7 @@ use crate::{
     error::{EngineError, Result},
     registry::{self, Entry},
 };
+use either::Either;
 use polars::lazy::dsl::by_name;
 use polars::prelude::*;
 use serde_json::{json, Value};
@@ -54,6 +55,23 @@ fn bools(v: &Value, key: &str, len: usize) -> Result<Vec<bool>> {
                 .ok_or_else(|| EngineError::Invalid(format!("'{key}' values must be booleans")))
         })
         .collect()
+}
+
+fn optional_string<'a>(v: &'a Value, key: &str, default: &'a str) -> Result<&'a str> {
+    match v.get(key) {
+        None => Ok(default),
+        Some(value) => value
+            .as_str()
+            .ok_or_else(|| EngineError::Invalid(format!("'{key}' must be a string"))),
+    }
+}
+
+fn optional_names(v: &Value, key: &str) -> Result<Option<Vec<String>>> {
+    v.get(key)
+        .map(|_| {
+            b::names(v, key).map(|names| names.into_iter().map(|name| name.to_string()).collect())
+        })
+        .transpose()
 }
 
 fn renamed(mut series: Series, name: &str) -> Series {
@@ -366,6 +384,95 @@ pub fn dispatch(command: &str, v: &Value) -> Result<Option<Value>> {
             fields(v, &["frame"])?;
             frame_response(registry::frame(b::handle(v, "frame")?)?.reverse())?
         }
+        "frameDistinct" => {
+            fields(v, &["frame", "subset", "keep", "maintainOrder"])?;
+            let subset = optional_names(v, "subset")?;
+            let keep = match optional_string(v, "keep", "first")? {
+                "first" => UniqueKeepStrategy::First,
+                "last" => UniqueKeepStrategy::Last,
+                "any" => UniqueKeepStrategy::Any,
+                "none" => UniqueKeepStrategy::None,
+                value => return Err(EngineError::Invalid(format!("unknown keep '{value}'"))),
+            };
+            let subset = subset.map(|names| names.into_iter().map(col).collect());
+            let frame = registry::frame(b::handle(v, "frame")?)?.lazy();
+            let output = if b::optional_bool(v, "maintainOrder", false)? {
+                frame.unique_stable_generic(subset, keep)
+            } else {
+                frame.unique_generic(subset, keep)
+            };
+            frame_response(output.collect()?)?
+        }
+        "frameDropNulls" => {
+            fields(v, &["frame", "subset"])?;
+            let subset = optional_names(v, "subset")?;
+            frame_response(registry::frame(b::handle(v, "frame")?)?.drop_nulls(subset.as_deref())?)?
+        }
+        "frameExplode" => {
+            fields(v, &["frame", "columns", "emptyAsNull", "keepNulls"])?;
+            if !b::optional_bool(v, "emptyAsNull", true)?
+                || !b::optional_bool(v, "keepNulls", true)?
+            {
+                return Err(EngineError::Invalid(
+                    "explode requires emptyAsNull=true and keepNulls=true".into(),
+                ));
+            }
+            frame_response(
+                registry::frame(b::handle(v, "frame")?)?
+                    .lazy()
+                    .explode(
+                        by_name(b::names(v, "columns")?, true, false),
+                        ExplodeOptions {
+                            empty_as_null: true,
+                            keep_nulls: true,
+                        },
+                    )
+                    .collect()?,
+            )?
+        }
+        "frameUnnest" => {
+            fields(v, &["frame", "columns"])?;
+            frame_response(
+                registry::frame(b::handle(v, "frame")?)?
+                    .lazy()
+                    .unnest(by_name(b::names(v, "columns")?, true, false), None)
+                    .collect()?,
+            )?
+        }
+        "frameUnpivot" => {
+            fields(v, &["frame", "on", "index", "variableName", "valueName"])?;
+            frame_response(
+                registry::frame(b::handle(v, "frame")?)?
+                    .lazy()
+                    .unpivot(UnpivotArgsDSL {
+                        on: v
+                            .get("on")
+                            .map(|_| b::names(v, "on").map(|names| by_name(names, true, false)))
+                            .transpose()?,
+                        index: by_name(b::names(v, "index")?, true, false),
+                        variable_name: v
+                            .get("variableName")
+                            .map(|_| b::string(v, "variableName").map(Into::into))
+                            .transpose()?,
+                        value_name: v
+                            .get("valueName")
+                            .map(|_| b::string(v, "valueName").map(Into::into))
+                            .transpose()?,
+                    })
+                    .collect()?,
+            )?
+        }
+        "frameTranspose" => {
+            fields(v, &["frame", "includeHeader", "headerName", "columnNames"])?;
+            let include_header = b::optional_bool(v, "includeHeader", false)?;
+            let header_name = optional_string(v, "headerName", "column")?;
+            let column_names = optional_names(v, "columnNames")?;
+            let mut frame = registry::frame(b::handle(v, "frame")?)?;
+            frame_response(frame.transpose(
+                include_header.then_some(header_name),
+                column_names.map(Either::Right),
+            )?)?
+        }
         "frameDrop" => {
             fields(v, &["frame", "columns", "strict"])?;
             let frame = registry::frame(b::handle(v, "frame")?)?;
@@ -389,4 +496,95 @@ pub fn dispatch(command: &str, v: &Value) -> Result<Option<Value>> {
         _ => return Ok(None),
     };
     Ok(Some(output))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn invoke_frame(command: &str, frame: DataFrame, fields: Value) -> DataFrame {
+        let handle = registry::insert(Entry::Frame(frame)).unwrap();
+        let mut request = json!({
+            "protocol": 2,
+            "command": command,
+            "frame": handle.to_string(),
+        });
+        request
+            .as_object_mut()
+            .unwrap()
+            .extend(fields.as_object().unwrap().clone());
+        let response = dispatch(command, &request).unwrap().unwrap();
+        registry::frame(response["handle"].as_str().unwrap().parse().unwrap()).unwrap()
+    }
+
+    #[test]
+    fn eager_single_frame_tranche_executes_through_protocol_dispatch() {
+        let flat = df!(
+            "key" => &[1i32, 1, 2],
+            "value" => &[Some(10i32), None, Some(30)],
+        )
+        .unwrap();
+        let distinct = invoke_frame(
+            "frameDistinct",
+            flat.clone(),
+            json!({"subset":["key"],"keep":"last","maintainOrder":true}),
+        );
+        assert_eq!(distinct.height(), 2);
+        let non_null = invoke_frame("frameDropNulls", flat.clone(), json!({"subset":["value"]}));
+        assert_eq!(non_null.height(), 2);
+        let unpivoted = invoke_frame(
+            "frameUnpivot",
+            flat.clone(),
+            json!({"on":["value"],"index":["key"],"variableName":"metric","valueName":"reading"}),
+        );
+        assert_eq!(
+            unpivoted
+                .get_column_names()
+                .iter()
+                .map(|name| name.as_str())
+                .collect::<Vec<_>>(),
+            ["key", "metric", "reading"]
+        );
+        let transposed = invoke_frame(
+            "frameTranspose",
+            flat,
+            json!({"includeHeader":true,"headerName":"source","columnNames":["r0","r1","r2"]}),
+        );
+        assert_eq!(transposed.shape(), (2, 4));
+
+        let items = Series::new(
+            "items".into(),
+            &[
+                Series::new("".into(), &[1i32, 2]),
+                Series::new("".into(), &[3i32]),
+            ],
+        );
+        let exploded = invoke_frame(
+            "frameExplode",
+            DataFrame::new(2, vec![items.into()]).unwrap(),
+            json!({"columns":["items"],"emptyAsNull":true,"keepNulls":true}),
+        );
+        assert_eq!(exploded.height(), 3);
+
+        let fields = [
+            Series::new("left".into(), &[1i32, 2]),
+            Series::new("right".into(), &[3i32, 4]),
+        ];
+        let record = StructChunked::from_series("record".into(), 2, fields.iter())
+            .unwrap()
+            .into_series();
+        let unnested = invoke_frame(
+            "frameUnnest",
+            DataFrame::new(2, vec![record.into()]).unwrap(),
+            json!({"columns":["record"]}),
+        );
+        assert_eq!(
+            unnested
+                .get_column_names()
+                .iter()
+                .map(|name| name.as_str())
+                .collect::<Vec<_>>(),
+            ["left", "right"]
+        );
+    }
 }

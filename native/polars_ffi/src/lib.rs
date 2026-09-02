@@ -15,7 +15,9 @@ mod namespace_expr;
 mod registry;
 mod selectors;
 mod sql;
+mod sqlite;
 mod temporal_relational;
+mod xlsx;
 
 use std::{
     ffi::c_void,
