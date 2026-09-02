@@ -1,0 +1,72 @@
+name: Native consumer smoke
+
+# Run this after publishing the GitHub Release and before publishing to pub.dev.
+# It exercises the same unauthenticated download, checksum verification, code
+# asset bundling, and Polars.native() path that package consumers use.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Stable package/native version (for example, 0.1.0)
+        required: true
+        type: string
+      release_tag:
+        description: Published GitHub Release tag, exactly v<version>
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: native-consumer-smoke-${{ inputs.release_tag }}
+  cancel-in-progress: false
+
+jobs:
+  smoke:
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - runner: macos-14
+          - runner: macos-15-intel
+          - runner: ubuntu-24.04-arm
+          - runner: ubuntu-24.04
+          - runner: windows-2025
+    runs-on: ${{ matrix.runner }}
+    timeout-minutes: 30
+    steps:
+      - name: Check out the exact release tag
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: refs/tags/${{ inputs.release_tag }}
+          persist-credentials: false
+      - name: Set up Python
+        uses: actions/setup-python@5fda3b95a4ea91299a34e894583c3862153e4b97 # v7.0.0
+        with:
+          python-version: "3.12"
+      - name: Validate the release identity and promoted pins
+        shell: bash
+        env:
+          VERSION: ${{ inputs.version }}
+          TAG: ${{ inputs.release_tag }}
+        run: python3 .github/scripts/validate_release.py "$VERSION" --tag "$TAG" --require-promoted
+      - name: Require a public GitHub Release
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ inputs.release_tag }}
+        run: |
+          set -euo pipefail
+          draft="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isDraft --jq .isDraft)"
+          prerelease="$(gh release view "$TAG" --repo "$GITHUB_REPOSITORY" --json isPrerelease --jq .isPrerelease)"
+          [[ "$draft" == "false" ]] || { echo "$TAG is still a draft" >&2; exit 1; }
+          echo "release is public (prerelease=$prerelease)"
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
+        with:
+          sdk: 3.13.0
+      - name: Resolve locked package dependencies
+        run: dart pub get --enforce-lockfile
+      - name: Exercise automatic native asset resolution
+        run: dart run example/series_arrow_head.dart
