@@ -2,6 +2,7 @@ use crate::error::{EngineError, Result};
 use parking_lot::Mutex;
 use polars::prelude::*;
 use polars::sql::SQLContext;
+use rusqlite::Connection;
 use std::sync::{Arc, OnceLock};
 
 pub type Handle = u64;
@@ -16,6 +17,7 @@ pub enum Entry {
     Job(Arc<crate::jobs::Job>),
     SqlContext(Arc<Mutex<SQLContext>>),
     BatchStream(Arc<crate::batch_stream::BatchStream>),
+    DatabaseConnection(Arc<Mutex<Connection>>),
 }
 
 struct Slot {
@@ -94,6 +96,7 @@ pub fn diagnostics() -> serde_json::Value {
             Entry::Job(_) => "job",
             Entry::SqlContext(_) => "sqlContext",
             Entry::BatchStream(_) => "batchStream",
+            Entry::DatabaseConnection(_) => "databaseConnection",
         };
         *by_kind.entry(kind).or_default() += 1;
     }
@@ -187,6 +190,13 @@ pub fn sql_context(handle: Handle) -> Result<Arc<Mutex<SQLContext>>> {
 pub fn batch_stream(handle: Handle) -> Result<Arc<crate::batch_stream::BatchStream>> {
     get(handle, "batch stream", |value| match value {
         Entry::BatchStream(v) => Some(v.clone()),
+        _ => None,
+    })
+}
+
+pub fn database_connection(handle: Handle) -> Result<Arc<Mutex<Connection>>> {
+    get(handle, "database connection", |value| match value {
+        Entry::DatabaseConnection(v) => Some(v.clone()),
         _ => None,
     })
 }

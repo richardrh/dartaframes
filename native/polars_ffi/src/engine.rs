@@ -5,7 +5,7 @@ use crate::{
     jobs::Job,
     namespace_expr,
     registry::{self, Entry},
-    selectors, sql, temporal_relational,
+    selectors, sql, sqlite, temporal_relational,
 };
 use polars::prelude::*;
 use serde_json::{json, Value};
@@ -60,6 +60,9 @@ pub fn invoke(bytes: &[u8]) -> Result<Value> {
     }
     if command.starts_with("sqlContext") {
         return envelope(sql::invoke(command, &r)?);
+    }
+    if command.starts_with("databaseConnection") {
+        return envelope(sqlite::invoke(command, &r)?);
     }
     let payload = match command {
         "hello" => {
@@ -834,6 +837,7 @@ fn hello() -> Value {
             "selector": ["selectorAll", "selectorEmpty", "selectorByName", "selectorByIndex", "selectorMatches", "selectorBinary", "selectorNot", "selectorAsExpr"],
             "dtypeSelector": ["dtypeSelectorCreate", "dtypeSelectorBinary", "dtypeSelectorNot", "dtypeSelectorAsSelector", "dtypeSelectorMatches"],
             "sql": ["sqlContextNew", "sqlContextRegister", "sqlContextRegisterAll", "sqlContextUnregister", "sqlContextTables", "sqlContextExecute"],
+            "database": ["databaseConnectionOpenSqlite", "databaseConnectionQuery", "databaseConnectionExecute", "databaseConnectionWriteFrame"],
             "lazy": ["lazyScanCsv", "lazyScanParquet", "lazyScanIpc", "lazyScanNdjson", "lazySinkCsv", "lazySinkParquet", "lazySinkIpc", "lazySinkNdjson", "lazySelect", "lazySelectInputs", "lazyFilter", "lazyWithColumns", "lazyWithColumnsInputs", "lazySort", "lazySlice", "lazyGroupBy", "lazyGroupByDynamic", "lazyGroupByRolling", "lazyJoin", "lazyJoinAsOf", "lazyJoinWhere", "lazyDistinct", "lazyDropNulls", "lazyDrop", "lazyRename", "lazyExplode", "lazyUnnest", "lazyUnpivot", "lazyConcat", "lazySchema", "lazyExplain"]
         },
         "operations": {
@@ -849,6 +853,7 @@ fn hello() -> Value {
             "qualifiedFunctions": ["str.lenBytes", "str.lenChars", "str.toLowercase", "str.toUppercase", "str.contains", "str.startsWith", "str.endsWith", "str.find", "str.extract", "str.extractAll", "str.split", "str.replace", "str.stripChars", "str.stripCharsStart", "str.stripCharsEnd", "str.stripPrefix", "str.stripSuffix", "str.slice", "str.head", "str.tail", "str.padStart", "str.padEnd", "str.zfill", "str.toDate", "str.toTime", "str.toDatetime", "dt.year", "dt.isoYear", "dt.month", "dt.day", "dt.ordinalDay", "dt.weekday", "dt.week", "dt.quarter", "dt.hour", "dt.minute", "dt.second", "dt.millisecond", "dt.microsecond", "dt.nanosecond", "dt.date", "dt.time", "dt.timestamp", "dt.format", "dt.truncate", "dt.round", "dt.offsetBy", "dt.convertTimeZone", "dt.baseUtcOffset", "dt.dstOffset", "list.len", "list.first", "list.last", "list.sum", "list.min", "list.max", "list.mean", "list.get", "list.contains", "list.sort", "list.slice", "arr.len", "arr.sum", "arr.min", "arr.max", "arr.mean", "arr.toList", "arr.get", "arr.contains", "arr.sort", "arr.explode", "struct.field", "struct.fieldAt", "struct.renameFields", "struct.jsonEncode", "bin.sizeBytes", "bin.contains", "bin.startsWith", "bin.endsWith", "bin.hexEncode", "bin.base64Encode", "cat.physical", "cat.categories", "name.keep", "name.prefix", "name.suffix", "name.toLowercase", "name.toUppercase", "meta.undoAliases"],
             "expressionMetadata": ["rootNames", "outputName", "isColumn", "isColumnSelection", "isLiteral", "hasMultipleOutputs", "isRegexProjection"],
             "options": {
+                "sqlite": ["bundled", "localFilesystemOnly", "positionalScalarParameters", "ifExists=fail|replace|append", "maxParameters=10000", "maxQueryRows=10000000"],
                 "cast": ["strict"],
                 "std": ["ddof"], "variance": ["ddof"],
                 "quantile": ["quantile", "interpolation=nearest|lower|higher|midpoint|linear"],
@@ -888,6 +893,7 @@ fn hello() -> Value {
                 "rename": ["existing", "new", "strict"],
                 "explode": ["columns", "emptyAsNull=true", "keepNulls=true"],
                 "unnest": ["columns"], "unpivot": ["on", "index", "variableName", "valueName"],
+                "transpose": ["includeHeader", "headerName", "columnNames"],
                 "over": ["partitionBy", "orderBy", "mapping=groupsToRows|explode|join", "orderDescending", "orderNullsLast", "orderMaintainOrder", "orderMultithreaded"],
                 "scanCsv": ["path", "hasHeader", "separator", "skipRows", "nRows", "tryParseDates"],
                 "scanParquet": ["path", "nRows", "parallel"],
@@ -1028,6 +1034,7 @@ mod tests {
             "explode",
             "unnest",
             "unpivot",
+            "transpose",
             "over",
             "scanCsv",
             "scanParquet",

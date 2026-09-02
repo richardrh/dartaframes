@@ -35,13 +35,14 @@ void main() {
       'job',
       'sqlContext',
       'batchStream',
+      'databaseConnection',
     ]);
     expect(
       hello.commands.values.cast<List<Object?>>().fold<int>(
         0,
         (count, commands) => count + commands.length,
       ),
-      112,
+      122,
     );
     expect(hello.commands['expression'], contains('exprLen'));
     expect(
@@ -53,6 +54,52 @@ void main() {
     expect(hello.interchange['unknownNullCount'], isFalse);
     expect(hello.operations['asyncJobEngines'], ['auto']);
     expect(hello.operations['maxActiveJobs'], 64);
+  }, skip: skipNative);
+
+  test('SQLite executes parameters and round-trips DataFrames', () {
+    final directory = Directory.systemTemp.createTempSync(
+      'dartaframes-sqlite-',
+    );
+    addTearDown(() => directory.deleteSync(recursive: true));
+    final database = polars.openSqlite('${directory.path}/people.db');
+    addTearDown(database.close);
+
+    expect(
+      database.executeSync(
+        'CREATE TABLE people (id INTEGER, name TEXT, score REAL)',
+      ),
+      0,
+    );
+    expect(
+      database.executeSync(
+        'INSERT INTO people VALUES (?1, ?2, ?3)',
+        parameters: [1, 'Ada', 9.5],
+      ),
+      1,
+    );
+    final selected = database.querySync(
+      'SELECT id, name, score FROM people WHERE id = ?1',
+      parameters: [1],
+    );
+    addTearDown(selected.close);
+    expect(selected.shapeSync(), (1, 3));
+
+    expect(database.writeFrameSync(selected, 'copied'), 1);
+    expect(
+      database.writeFrameSync(
+        selected,
+        'copied',
+        ifExists: DatabaseIfExists.append,
+      ),
+      1,
+    );
+    final count = database.querySync('SELECT count(*) AS count FROM copied');
+    addTearDown(count.close);
+    final exported = count.exportSync();
+    expect(
+      (exported.columns.single.values.single as ArrowIntegerValue).value,
+      BigInt.from(2),
+    );
   }, skip: skipNative);
 
   test('selectors and SQL execute native lazy plans end to end', () {

@@ -29,6 +29,7 @@ part 'dataframe.dart';
 part 'series.dart';
 part 'dataframe_eager.dart';
 part 'io_extended.dart';
+part 'database.dart';
 part 'sql.dart';
 
 /// An explicit native Polars runtime. Every resource created through this
@@ -56,6 +57,14 @@ final class Polars {
   /// Creates an empty SQL context owned by this runtime.
   SqlContext sqlContext() =>
       _adoptSqlContext(_client.invokeSync('sqlContextNew'));
+
+  /// Opens or creates a local SQLite database.
+  DatabaseConnection openSqlite(String path) {
+    _validateLocalPath(path);
+    return _adoptDatabaseConnection(
+      _client.invokeSync('databaseConnectionOpenSqlite', {'path': path}),
+    );
+  }
 
   NativeHelloCapabilities nativeCapabilitiesSync() =>
       _client.nativeCapabilitiesSync();
@@ -366,6 +375,8 @@ final class Polars {
       DTypeSelector._(this, _responseHandle(response));
   SqlContext _adoptSqlContext(Map<String, Object?> response) =>
       SqlContext._(this, _responseHandle(response));
+  DatabaseConnection _adoptDatabaseConnection(Map<String, Object?> response) =>
+      DatabaseConnection._(this, _responseHandle(response));
 }
 
 int _responseHandle(Map<String, Object?> response) {
@@ -398,11 +409,14 @@ void _validateName(String value, String argument) {
 void _validatePath(String value) => _validateName(value, 'path');
 void _validateLocalPath(String value) {
   _validatePath(value);
-  if (value.contains('://')) {
+  if (value.contains('\u0000') ||
+      value == ':memory:' ||
+      value.startsWith('file:') ||
+      value.contains('://')) {
     throw ArgumentError.value(
       value,
       'path',
-      'only local filesystem paths are supported',
+      'must be a local filesystem path, not a URI or in-memory database',
     );
   }
 }
