@@ -9,6 +9,7 @@ crate-type = ["cdylib", "rlib"]
 
 [dependencies]
 base64 = "0.23"
+either = "1"
 parking_lot = "0.12"
 rusqlite = { version = "0.37", features = ["bundled"] }
 polars = { version = "=0.55.2", default-features = false, features = [

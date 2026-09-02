@@ -60,13 +60,14 @@
   },
   "commands": {
     "core": ["hello", "runtimeDiagnostics"],
-    "frame": ["frameImport", "frameInfo", "frameExport", "frameLazy", "frameReadJson", "frameReadIpcStream", "frameWriteCsv", "frameWriteParquet", "frameWriteIpc", "frameWriteIpcStream", "frameWriteJson", "frameWriteNdjson", "frameColumn", "frameSelectColumns", "frameSelect", "frameFilter", "frameFilterMask", "frameWithColumns", "frameSort", "frameSlice", "frameReverse", "frameDrop", "frameRename"],
+    "frame": ["frameImport", "frameInfo", "frameExport", "frameLazy", "frameReadJson", "frameReadIpcStream", "frameWriteCsv", "frameWriteParquet", "frameWriteIpc", "frameWriteIpcStream", "frameWriteJson", "frameWriteNdjson", "frameColumn", "frameSelectColumns", "frameSelect", "frameFilter", "frameFilterMask", "frameWithColumns", "frameSort", "frameSlice", "frameReverse", "frameDistinct", "frameDropNulls", "frameExplode", "frameUnnest", "frameUnpivot", "frameTranspose", "frameDrop", "frameRename"],
     "series": ["seriesImport", "seriesInfo", "seriesExport", "seriesToFrame", "seriesRename", "seriesCast", "seriesSlice", "seriesReverse", "seriesSort", "seriesFilter", "seriesDropNulls", "seriesAppend", "seriesGather", "seriesUnique", "seriesBinary", "seriesAggregate"],
     "job": ["lazyCollect", "lazySubmit", "lazyProfile", "jobPoll", "jobCancel", "jobTake", "lazyBatchStream", "batchStreamPoll", "batchStreamCancel"],
     "expression": ["exprColumn", "exprLiteral", "exprLen", "exprAlias", "exprCast", "exprUnary", "exprBinary", "exprTernary", "exprAggregate", "exprFunction", "exprMeta", "exprOver"],
     "selector": ["selectorAll", "selectorEmpty", "selectorByName", "selectorByIndex", "selectorMatches", "selectorBinary", "selectorNot", "selectorAsExpr"],
     "dtypeSelector": ["dtypeSelectorCreate", "dtypeSelectorBinary", "dtypeSelectorNot", "dtypeSelectorAsSelector", "dtypeSelectorMatches"],
     "sql": ["sqlContextNew", "sqlContextRegister", "sqlContextRegisterAll", "sqlContextUnregister", "sqlContextTables", "sqlContextExecute"],
+    "database": ["databaseConnectionOpenSqlite", "databaseConnectionQuery", "databaseConnectionExecute", "databaseConnectionWriteFrame"],
     "lazy": ["lazyScanCsv", "lazyScanParquet", "lazyScanIpc", "lazyScanNdjson", "lazySinkCsv", "lazySinkParquet", "lazySinkIpc", "lazySinkNdjson", "lazySelect", "lazySelectInputs", "lazyFilter", "lazyWithColumns", "lazyWithColumnsInputs", "lazySort", "lazySlice", "lazyGroupBy", "lazyGroupByDynamic", "lazyGroupByRolling", "lazyJoin", "lazyJoinAsOf", "lazyJoinWhere", "lazyDistinct", "lazyDropNulls", "lazyDrop", "lazyRename", "lazyExplode", "lazyUnnest", "lazyUnpivot", "lazyConcat", "lazySchema", "lazyExplain"]
   },
   "operations": {

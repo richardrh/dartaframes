@@ -10,7 +10,7 @@ weight: 4
 | Base | Polars Rust 0.55.2; ABI and protocol version 2 |
 | Overall | **Partial** — an explicit-runtime, native-handle binding, not method-for-method Polars parity |
 | Strongest areas | Lazy query composition, core expressions, joins and groups, CSV/Parquet, selectors, SQL, Arrow interchange, and bounded streaming |
-| Main gaps | Eager operations, expression families, reshape, configuration, cloud/database adapters, and host-ecosystem integrations |
+| Main gaps | Broader eager operations, expression families, pivot-style reshape, configuration, cloud/remote database adapters, and host-ecosystem integrations |
 
 The matrices below distinguish **Implemented**, **Partial**, **Missing**, and
 **Host-only/out of scope** coverage. Do not assume that a Python or Rust Polars
@@ -63,7 +63,7 @@ Future variants are listed separately when the distinction matters.
 | --- | --- | --- |
 | Explicit runtime | **Implemented** | `Polars.native`, `Polars.open`, `Polars.process`, `Polars.fromClient`; capability discovery through `nativeCapabilitiesSync` and `nativeCapabilities`; diagnostic snapshots through `runtimeDiagnosticsSync` and `runtimeDiagnostics`. `Polars.native` requires promoted native release metadata. There are intentionally no runtime-free globals. |
 | Expression constructors | **Partial** | `Polars.col`, `Polars.lit`, `Polars.len`, `Polars.when`; ternary completion is `When.then(...).otherwise(...)`. No ranges, repeats, folds, horizontal aggregators, struct/list constructors, or general Python-style top-level function catalog. |
-| Data sources/constructors | **Partial** | `Polars.scanCsv`, `scanParquet`, `scanIpc`/`scanFeather`, `scanNdjson`, eager local `readJsonSync`/`readJson` and `readIpcStreamSync`/`readIpcStream`, plus copied record-batch/array import. Scans expose typed compact option sets. |
+| Data sources/constructors | **Partial** | `Polars.scanCsv`, `scanParquet`, `scanIpc`/`scanFeather`, `scanNdjson`, eager local `readJsonSync`/`readJson` and `readIpcStreamSync`/`readIpcStream`, copied record-batch/array import, and `openSqlite` for a local owned SQLite connection. Scans expose typed compact option sets. |
 | Concatenation | **Partial** | `Polars.concat` supports `vertical`, `verticalRelaxed`, `diagonal`, `diagonalRelaxed`, and `horizontal`; vertical/diagonal modes expose `rechunk`. |
 | Resource lifecycle | **Implemented** | `Expr.isClosed`/`close`, `LazyFrame.isClosed`/`close`, `DataFrame.isClosed`/`close`, `Series.isClosed`/`close`, and `CancellableQuery.isClosed`/`close`; resources cannot be mixed across `Polars` instances. |
 
@@ -84,7 +84,7 @@ Future variants are listed separately when the distinction matters.
 | --- | --- | --- |
 | Frame lifecycle/metadata | **Implemented** | `DataFrame.isClosed`, `close`, `lazy`, `infoSync`, `info`, `schemaSync`, `schema`, `shapeSync`. |
 | Frame export/output | **Partial** | Copied batch export plus eager CSV, Parquet, IPC/Feather file, IPC stream, JSON-array, and NDJSON local writers. Local replacement uses a same-directory temporary file before persistence. |
-| Eager transformations | **Partial** | `DataFrame.column`, `selectColumns`, `select`, `filter`, `filterMask`, `withColumns`, `sort`, `slice`, `head`, `tail`, `reverse`, `drop`, and `rename` execute immediately and return independent native handles. Eager group-by, join, distinct, reshape, and row iteration remain absent. |
+| Eager transformations | **Partial** | `DataFrame.column`, `selectColumns`, `select`, `filter`, `filterMask`, `withColumns`, `sort`, `slice`, `head`, `tail`, `reverse`, `distinct`, `dropNulls`, `explode`, `unnest`, `unpivot`, `transpose`, `drop`, and `rename` execute immediately and return independent native handles. Eager group-by, join, pivot, and row iteration remain absent. |
 | `Series`/typed chunked arrays | **Partial** | `Series` has direct native lifecycle, `infoSync`/`info`, `nameSync`, `dtypeSync`, `lengthSync`, `nullCountSync`, `exportSync`/`export`, `toFrame`, `rename`, `cast`, `slice`/`head`/`tail`, `reverse`, `sort`, `filter`, `dropNulls`, `append`, `gather`, `unique`, comparisons, `+`/`-`/`*`/`/`, exact typed `sum`/`mean`/`min`/`max`/`first`/`last`, and integer `count`/`nUnique`. Namespaces and broader kernels remain absent. |
 
 ### Expressions: core and scalar operations
@@ -127,17 +127,17 @@ direct string methods remain as aliases.
 | Window expressions | **Partial** | `Expr.over(partitionBy, orderBy:, options:)` supports partition-only compatibility, ordering options, and `groupsToRows`/`explode`/`join` mapping. No explicit frame bounds. |
 | Equality and Cartesian joins | **Partial** | Legacy `LazyFrame.join` retains its string mode and Boolean coalesce API. `joinWithOptions` adds typed modes, nullable join-specific coalescing, null equality, validation, order and parallel controls. |
 | Advanced joins | **Implemented** | `LazyFrame.joinAsOf` with typed strategy/duration/group options and `joinWhere` for non-equi predicates. |
-| Basic reshape | **Partial** | `LazyFrame.explode`, `unnest`, and `unpivot`; all vertical/diagonal/horizontal `Polars.concat` modes. |
-| General reshape | **Missing** | No pivot, transpose, unstack, partition-by, dummy encoding, or merge-sorted. |
+| Basic reshape | **Partial** | Eager and lazy `explode`, `unnest`, and `unpivot`; eager `transpose`; all vertical/diagonal/horizontal `Polars.concat` modes. |
+| General reshape | **Missing** | No pivot, unstack, partition-by, dummy encoding, or merge-sorted. |
 
 ### I/O and interchange
 
 | Area | Status | Public Dart API and boundary |
 | --- | --- | --- |
-| CSV | **Partial** | `Polars.scanCsv`; `DataFrame.writeCsvSync`/`writeCsv`; `LazyFrame.writeCsvSync`/`writeCsv`. Scan/write options are intentionally small. There is no eager CSV reader or byte/stream source. |
-| Parquet | **Partial** | `Polars.scanParquet`; `DataFrame.writeParquetSync`/`writeParquet`; `LazyFrame.writeParquetSync`/`writeParquet`. Small scan option set; no metadata API, cloud options, or partitioned dataset interface. |
+| CSV | **Partial** | `Polars.scanCsv`; eager and lazy writes with typed `CsvWriteOptions` for headers/BOM, delimiters, quoting, nulls, line endings, temporal/float formatting, and batching. Legacy `includeHeader`/`separator` arguments remain supported. There is no eager CSV reader or byte/stream source. |
+| Parquet | **Partial** | `Polars.scanParquet`; eager and lazy writes with typed `ParquetWriteOptions` for compression, row-group/page sizing, and statistics. Eager writes additionally expose column serialization parallelism. Legacy `compression` remains supported. No metadata API, cloud options, or partitioned dataset interface. |
 | Lazy sinks | **Partial** | Native synchronous streaming sinks are exposed as `sinkCsvSync`, `sinkParquetSync`, `sinkIpcSync`/`sinkFeatherSync`, and `sinkNdjsonSync`, with compatibility wrappers without `Sync`. Format and sink options remain deliberately narrow. |
-| Other native formats/sources | **Partial** | Local IPC/Feather scan/write, IPC-stream eager read/write, JSON-array eager read/write, and NDJSON scan/write are implemented. Avro is deferred because this tranche cannot natively verify its source behavior. Cloud/object-store, HTTP, database, and table-format adapters remain out of scope. |
+| Other native formats/sources | **Partial** | Local IPC/Feather scan/write, IPC-stream eager read/write, JSON-array eager read/write, and NDJSON scan/write are implemented. Owned local SQLite connections support parameterized query/execute and transactional DataFrame writes with fail/replace/append policies. Avro, cloud/object-store, HTTP, remote databases, and table formats remain deferred. |
 | Copied owned-batch interchange | **Partial** | `RecordBatchCodec.encode`/`decode`, `Polars.fromRecordBatchSync`/`fromRecordBatch`, and `DataFrame.exportSync`/`export`. Columns are copied through JSON-compatible logical values; the practical full path is the flat supported subset through `time`. Nested/category/extension paths are not materialized. |
 | Arrow standards interchange | **Partial** | `DataFrame.exportArrowC`, `Series.exportArrowC`, `Polars.fromArrowCData`, `seriesFromArrowCData`, `DataFrame.exportArrowCStream`, and bounded `Polars.fromArrowCStream` expose Arrow C Data/C Stream ownership for the supported flat tranche. IPC file/stream I/O is separate. |
 

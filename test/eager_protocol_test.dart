@@ -234,6 +234,103 @@ void main() {
     frame.close();
   });
 
+  test('eager reshape APIs emit exact schemas and independent handles', () {
+    final invoker = EagerInvoker();
+    final polars = Polars.fromClient(ProtocolClient(invoker));
+    final frame = polars.fromRecordBatchSync(
+      RecordBatch(ArrowSchema([ArrowField('value', ArrowIntegerType(32))]), [
+        integers(),
+      ]),
+    );
+
+    final distinct = frame.distinct(
+      subset: ['value'],
+      keep: 'last',
+      maintainOrder: true,
+    );
+    frame.dropNulls(subset: ['value']).close();
+    frame.explode(['value']).close();
+    frame.unnest(['value']).close();
+    frame
+        .unpivot(
+          on: ['value'],
+          index: const [],
+          variableName: 'metric',
+          valueName: 'reading',
+        )
+        .close();
+    frame
+        .transpose(
+          includeHeader: true,
+          headerName: 'source',
+          columnNames: ['row0', 'row1'],
+        )
+        .close();
+
+    expect(invoker.requests.skip(1).toList(), [
+      {
+        'protocol': 2,
+        'command': 'frameDistinct',
+        'frame': '1',
+        'subset': ['value'],
+        'keep': 'last',
+        'maintainOrder': true,
+      },
+      {
+        'protocol': 2,
+        'command': 'frameDropNulls',
+        'frame': '1',
+        'subset': ['value'],
+      },
+      {
+        'protocol': 2,
+        'command': 'frameExplode',
+        'frame': '1',
+        'columns': ['value'],
+        'emptyAsNull': true,
+        'keepNulls': true,
+      },
+      {
+        'protocol': 2,
+        'command': 'frameUnnest',
+        'frame': '1',
+        'columns': ['value'],
+      },
+      {
+        'protocol': 2,
+        'command': 'frameUnpivot',
+        'frame': '1',
+        'on': ['value'],
+        'index': <String>[],
+        'variableName': 'metric',
+        'valueName': 'reading',
+      },
+      {
+        'protocol': 2,
+        'command': 'frameTranspose',
+        'frame': '1',
+        'includeHeader': true,
+        'headerName': 'source',
+        'columnNames': ['row0', 'row1'],
+      },
+    ]);
+
+    frame.close();
+    expect(distinct.isClosed, isFalse);
+    distinct.close();
+
+    final before = invoker.requests.length;
+    expect(() => frame.distinct(keep: 'bad'), throwsArgumentError);
+    expect(() => frame.explode(const []), throwsArgumentError);
+    expect(() => frame.unnest(['']), throwsArgumentError);
+    expect(() => frame.unpivot(on: const []), throwsArgumentError);
+    expect(
+      () => frame.transpose(includeHeader: true, headerName: ''),
+      throwsArgumentError,
+    );
+    expect(invoker.requests, hasLength(before));
+  });
+
   test(
     'Series info, copied export, and toFrame use only owned handle fields',
     () {

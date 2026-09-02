@@ -88,6 +88,36 @@ final frame = polars.scanParquet('sales.parquet').collectSync();
 Bridge the two APIs with `frame.exportSync()` and
 `polars.fromRecordBatchSync(batch)`.
 
+## Write files and use SQLite
+
+CSV and Parquet writers accept typed options on eager frames and lazy sinks:
+
+```dart
+frame.writeCsvSync(
+  'output.csv',
+  options: const CsvWriteOptions(separator: ';'),
+);
+frame.writeParquetSync(
+  'output.parquet',
+  options: const ParquetWriteOptions(compression: ParquetCompression.zstd),
+);
+```
+
+SQLite is local, parameterized, native, and does not require Python:
+
+```dart
+final database = polars.openSqlite('data/app.db');
+database.executeSync(
+  'INSERT INTO people(name) VALUES (?1)',
+  parameters: ['Ada'],
+);
+final people = database.querySync('SELECT * FROM people');
+database.writeFrameSync(people, 'people_copy');
+```
+
+`DatabaseConnection` and returned `DataFrame` objects are owned handles. Call
+`close()` when deterministic release matters.
+
 ## Resource lifetime
 
 Native-backed objects have finalizers, so normal application code can stay

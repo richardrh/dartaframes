@@ -98,6 +98,12 @@ other fields are. `?` means optional. Handle-valued fields use decimal strings.
 | frame | `frameSort` | `frame`, `by`, `descending`, `nullsLast`, `maintainOrder` |
 | frame | `frameSlice` | `frame`, `offset`, `length` |
 | frame | `frameReverse` | `frame` |
+| frame | `frameDistinct` | `frame`, `subset?`, `keep`, `maintainOrder` |
+| frame | `frameDropNulls` | `frame`, `subset?` |
+| frame | `frameExplode` | `frame`, `columns`, `emptyAsNull=true`, `keepNulls=true` |
+| frame | `frameUnnest` | `frame`, `columns` |
+| frame | `frameUnpivot` | `frame`, `on?`, `index`, `variableName?`, `valueName?` |
+| frame | `frameTranspose` | `frame`, `includeHeader`, `headerName`, `columnNames?` |
 | frame | `frameDrop` | `frame`, `columns`, `strict` |
 | frame | `frameRename` | `frame`, `existing`, `new`, `strict` |
 | series | `seriesImport` | `column` |

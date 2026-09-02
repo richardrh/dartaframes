@@ -93,11 +93,47 @@ pub fn invoke(bytes: &[u8]) -> Result<Value> {
             )?
         }
         "frameWriteCsv" => {
-            fields(&r, &["frame", "path", "includeHeader", "separator"])?;
+            fields(
+                &r,
+                &[
+                    "frame",
+                    "path",
+                    "includeHeader",
+                    "separator",
+                    "includeBom",
+                    "batchSize",
+                    "dateFormat",
+                    "timeFormat",
+                    "datetimeFormat",
+                    "floatScientific",
+                    "floatPrecision",
+                    "decimalComma",
+                    "quoteChar",
+                    "nullValue",
+                    "lineTerminator",
+                    "quoteStyle",
+                    "nThreads",
+                ],
+            )?;
             write_csv(&r)?
         }
         "frameWriteParquet" => {
-            fields(&r, &["frame", "path", "compression"])?;
+            fields(
+                &r,
+                &[
+                    "frame",
+                    "path",
+                    "compression",
+                    "rowGroupSize",
+                    "dataPageSize",
+                    "statisticsMin",
+                    "statisticsMax",
+                    "statisticsDistinctCount",
+                    "statisticsNullCount",
+                    "statisticsBinaryTruncateLength",
+                    "parallel",
+                ],
+            )?;
             write_parquet(&r)?
         }
         "lazyCollect" => {
@@ -812,7 +848,7 @@ fn hello() -> Value {
         "polars": "0.55.2",
         "datatypes": DATATYPES,
         "datatypeCapabilities": datatype_capabilities,
-        "resources": ["expr", "selector", "dtypeSelector", "lazyFrame", "frame", "series", "job", "sqlContext", "batchStream"],
+        "resources": ["expr", "selector", "dtypeSelector", "lazyFrame", "frame", "series", "job", "sqlContext", "batchStream", "databaseConnection"],
         "interchange": {
             "arrowCDataVersion": 1,
             "arrowCStreamVersion": 1,
@@ -995,7 +1031,8 @@ mod tests {
                 "series",
                 "job",
                 "sqlContext",
-                "batchStream"
+                "batchStream",
+                "databaseConnection"
             ])
         );
         let command_count: usize = value["commands"]
@@ -1004,7 +1041,7 @@ mod tests {
             .values()
             .map(|commands| commands.as_array().unwrap().len())
             .sum();
-        assert_eq!(command_count, 112);
+        assert_eq!(command_count, 122);
         assert!(value["commands"]["expression"]
             .as_array()
             .unwrap()
