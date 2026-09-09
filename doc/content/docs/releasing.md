@@ -40,7 +40,15 @@ an unreviewed binary.
    version and tag. Its five native runners invoke `Polars.native()` without a
    library path, forcing the promoted hook through its normal unauthenticated
    download, checksum verification, cache, bundle, FFI, CSV, and Arrow C paths.
-   Publish `dartaframes` to pub.dev only after every matrix job passes.
+   Publish `dartaframes` to pub.dev only after every matrix job passes. Use the
+   `Publish to pub.dev` workflow from the exact `v<version>` tag; it validates
+   the tag, promoted metadata, dry-run archive, and then publishes through
+   pub.dev's GitHub OIDC integration.
 
-Neither workflow publishes the GitHub draft or pub package. Draft assets are
-not a valid simulation of the public consumer download path.
+GitHub Pages deploys the documentation automatically from `master`. The first
+deployment also requires enabling Pages in repository settings with GitHub
+Actions as the source.
+
+Neither the native workflows nor the documentation workflow publishes the
+GitHub draft or package automatically. Draft assets are not a valid simulation
+of the public consumer download path.

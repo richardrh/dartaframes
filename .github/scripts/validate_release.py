@@ -54,7 +54,8 @@ def main() -> None:
         "native Dart metadata": metadata_version,
     }
     if len(set(versions.values())) != 1:
-        raise SystemExit("release versions disagree: " + ", ".join(f"{k}={v}" for k, v in versions.items()))
+        details = ", ".join(f"{key}={value}" for key, value in versions.items())
+        raise SystemExit(f"release versions disagree: {details}")
     records = set(re.findall(r"^  '([^']+)': NativeReleaseArtifact\($", metadata, re.MULTILINE))
     if records != TARGETS:
         raise SystemExit(f"native metadata target set is incomplete: {sorted(TARGETS - records)}")

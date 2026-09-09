@@ -1,0 +1,50 @@
+name: Publish to pub.dev
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: Exact published Git tag (for example, v0.1.0)
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  id-token: write
+
+concurrency:
+  group: publish-${{ inputs.tag }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    runs-on: ubuntu-24.04
+    environment: pub.dev
+    timeout-minutes: 15
+    steps:
+      - name: Check out the exact release tag
+        uses: actions/checkout@11bd71901bbe5b1630ceea73d27597364c9af683 # v4.2.2
+        with:
+          ref: refs/tags/${{ inputs.tag }}
+          persist-credentials: false
+      - name: Set up Dart
+        uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
+        with:
+          sdk: 3.13.0
+      - name: Validate tag and package version
+        env:
+          TAG: ${{ inputs.tag }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(sed -n 's/^version: *//p' pubspec.yaml)"
+          [[ "$TAG" == "v$version" ]] || {
+            echo "tag $TAG does not match pubspec version $version" >&2
+            exit 1
+          }
+          python3 .github/scripts/validate_release.py "$version" --tag "$TAG" --require-promoted
+      - name: Publish package
+        run: |
+          dart pub get --enforce-lockfile
+          dart pub publish --dry-run
+          dart pub publish --force

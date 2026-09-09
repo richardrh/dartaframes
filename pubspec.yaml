@@ -1,6 +1,6 @@
 name: dartaframes
 description: Direct native-handle Polars expressions and frames for Dart.
-version: 0.1.0-dev.1
+version: 0.1.0
 repository: https://github.com/richardrh/dartaframes
 issue_tracker: https://github.com/richardrh/dartaframes/issues
 topics:

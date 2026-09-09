@@ -1,5 +1,26 @@
 # Changelog
 
+## 0.1.0
+
+- Initial stable release of the direct native-handle Dart binding to Rust
+  Polars.
+- Added lazy and eager dataframe operations, expressions, selectors, SQL, and
+  local data-format I/O for the documented partial API.
+- Added copied owned-batch interchange, Arrow C Data/C Stream interchange, and
+  bounded pull-based batch streaming.
+- Added explicit native handle ownership, collection jobs, cancellation, and
+  capability discovery.
+- Added typed CSV and Parquet writer controls for eager frames and lazy sinks,
+  including atomic local replacement behavior.
+- Added eager distinct, null dropping, explode, unnest, unpivot, and transpose
+  DataFrame operations.
+- Added owned local SQLite connections with parameterized query/execute and
+  transactional DataFrame writes.
+- Added native eager XLSX worksheet reading and writing with typed options,
+  schema inference, scalar/date round trips, and atomic local replacement.
+- Added checksum-pinned native-assets distribution support for the five
+  supported desktop targets.
+
 ## 0.1.0-dev.1
 
 - Initial pre-release of the direct native-handle Dart binding to Rust Polars.
