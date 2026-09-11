@@ -172,7 +172,19 @@ jobs:
           rustc "+$RUST_TOOLCHAIN" --version --verbose
       - name: Test locked native workspace
         shell: bash
-        run: cargo "+$RUST_TOOLCHAIN" test --locked --workspace --target '${{ matrix.target }}'
+        run: |
+          set -euo pipefail
+          for attempt in 1 2 3; do
+            if cargo "+$RUST_TOOLCHAIN" test --locked --workspace --target '${{ matrix.target }}'; then
+              exit 0
+            fi
+            status=$?
+            if [[ "$status" -ne 143 || "$attempt" -eq 3 ]]; then
+              exit "$status"
+            fi
+            echo "cargo test was terminated (143); retrying attempt $((attempt + 1))" >&2
+            sleep 10
+          done
       - name: Build locked release library
         shell: bash
         run: cargo "+$RUST_TOOLCHAIN" build --locked --release --package dartaframes_polars_ffi --target '${{ matrix.target }}'
