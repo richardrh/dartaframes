@@ -173,12 +173,13 @@ jobs:
       - name: Test locked native workspace
         shell: bash
         run: |
-          set -euo pipefail
+          set +e
           for attempt in 1 2 3; do
-            if cargo "+$RUST_TOOLCHAIN" test --locked --workspace --target '${{ matrix.target }}'; then
+            cargo "+$RUST_TOOLCHAIN" test --locked --workspace --target '${{ matrix.target }}'
+            status=$?
+            if [[ "$status" -eq 0 ]]; then
               exit 0
             fi
-            status=$?
             if [[ "$status" -ne 143 || "$attempt" -eq 3 ]]; then
               exit "$status"
             fi
