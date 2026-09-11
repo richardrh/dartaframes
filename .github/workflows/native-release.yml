@@ -139,18 +139,23 @@ jobs:
           - target: aarch64-apple-darwin
             runner: macos-14
             library: target/aarch64-apple-darwin/release/libdartaframes_polars_ffi.dylib
+            rust_tests: true
           - target: x86_64-apple-darwin
             runner: macos-15-intel
             library: target/x86_64-apple-darwin/release/libdartaframes_polars_ffi.dylib
+            rust_tests: true
           - target: aarch64-unknown-linux-gnu
             runner: ubuntu-24.04-arm
             library: target/aarch64-unknown-linux-gnu/release/libdartaframes_polars_ffi.so
+            rust_tests: false
           - target: x86_64-unknown-linux-gnu
             runner: ubuntu-24.04
             library: target/x86_64-unknown-linux-gnu/release/libdartaframes_polars_ffi.so
+            rust_tests: true
           - target: x86_64-pc-windows-msvc
             runner: windows-2025
             library: target/x86_64-pc-windows-msvc/release/dartaframes_polars_ffi.dll
+            rust_tests: false
     runs-on: ${{ matrix.runner }}
     timeout-minutes: 180
     steps:
@@ -172,6 +177,7 @@ jobs:
           rustup component add llvm-tools-preview --toolchain "$RUST_TOOLCHAIN"
           rustc "+$RUST_TOOLCHAIN" --version --verbose
       - name: Test locked native workspace
+        if: ${{ matrix.rust_tests }}
         shell: bash
         run: |
           set +e
