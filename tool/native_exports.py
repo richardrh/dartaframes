@@ -46,14 +46,34 @@ def require_abi_exports(listing: str) -> set[str]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("--listing", type=Path, required=True)
+    sources = parser.add_mutually_exclusive_group(required=True)
+    sources.add_argument("--listing", type=Path)
+    sources.add_argument("--coff-exports", type=Path)
     args = parser.parse_args()
     try:
-        exports = require_abi_exports(args.listing.read_text(encoding="utf-8"))
+        if args.coff_exports is not None:
+            exports = require_abi_exports_from_coff_exports(
+                args.coff_exports.read_text(encoding="utf-8")
+            )
+        else:
+            exports = require_abi_exports(args.listing.read_text(encoding="utf-8"))
     except (OSError, UnicodeError, ExportError) as error:
         parser.error(str(error))
     print(f"verified all {len(SYMBOLS)} required ABI exports ({len(exports)} defined exports)")
     return 0
+
+
+def coff_exports(text: str) -> set[str]:
+    """Parse llvm-readobj --coff-exports output."""
+    return set(re.findall(r"^\s*Name:\s*([A-Za-z][A-Za-z0-9_@$?.-]*)\s*$", text, re.MULTILINE))
+
+
+def require_abi_exports_from_coff_exports(text: str) -> set[str]:
+    exports = coff_exports(text)
+    missing = set(SYMBOLS) - exports
+    if missing:
+        raise ExportError(f"native library is missing ABI exports: {sorted(missing)}")
+    return exports
 
 
 if __name__ == "__main__":

@@ -197,6 +197,7 @@ jobs:
         shell: bash
         run: cargo "+$RUST_TOOLCHAIN" build --locked --release --package dartaframes_polars_ffi --target '${{ matrix.target }}'
       - name: Verify every advertised native ABI export
+        if: ${{ matrix.target != 'x86_64-pc-windows-msvc' }}
         shell: bash
         env:
           LIBRARY_PATH: ${{ matrix.library }}
@@ -209,6 +210,20 @@ jobs:
           [[ -x "$llvm_nm" ]] || llvm_nm="$llvm_nm.exe"
           "$llvm_nm" --defined-only --extern-only "$LIBRARY_PATH" > defined-exports.txt
           python3 tool/native_exports.py --listing defined-exports.txt
+      - name: Verify Windows export table
+        if: ${{ matrix.target == 'x86_64-pc-windows-msvc' }}
+        shell: bash
+        env:
+          LIBRARY_PATH: ${{ matrix.library }}
+        run: |
+          set -euo pipefail
+          sysroot="$(rustc "+$RUST_TOOLCHAIN" --print sysroot)"
+          host="$(rustc "+$RUST_TOOLCHAIN" -vV | python3 -c 'import sys; print(next(line.split(": ", 1)[1] for line in sys.stdin if line.startswith("host: ")))')"
+          llvm_readobj="$sysroot/lib/rustlib/$host/bin/llvm-readobj"
+          [[ -x "$llvm_readobj" || -x "$llvm_readobj.exe" ]] || { echo "llvm-readobj not found" >&2; exit 1; }
+          [[ -x "$llvm_readobj" ]] || llvm_readobj="$llvm_readobj.exe"
+          "$llvm_readobj" --coff-exports "$LIBRARY_PATH" > coff-exports.txt
+          python3 tool/native_exports.py --coff-exports coff-exports.txt
       - name: Set up Dart
         uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
         with:
