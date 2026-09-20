@@ -128,6 +128,16 @@ def make_zip(entries: dict[str, bytes]) -> bytes:
     return raw.getvalue()
 
 
+def normalized_legal_file(path: Path) -> bytes:
+    """Keep packaged legal text identical across Windows and Unix runners."""
+    return (
+        path.read_text(encoding="utf-8")
+        .replace("\r\n", "\n")
+        .replace("\r", "\n")
+        .encode()
+    )
+
+
 def package(args: argparse.Namespace) -> None:
     validate_version(args.version)
     expected = TARGETS[args.target]
@@ -139,8 +149,8 @@ def package(args: argparse.Namespace) -> None:
     library = source.read_bytes()
     if not library:
         raise DistributionError("refusing to package an empty library")
-    license_text = args.license.read_bytes()
-    third_party_licenses = args.third_party_licenses.read_bytes()
+    license_text = normalized_legal_file(args.license)
+    third_party_licenses = normalized_legal_file(args.third_party_licenses)
     if not license_text or not third_party_licenses:
         raise DistributionError("license files must not be empty")
     metadata = manifest(
@@ -263,7 +273,7 @@ def verify(args: argparse.Namespace) -> None:
 def build_index(args: argparse.Namespace) -> None:
     validate_version(args.version)
     legal_files = {
-        name: (args.directory / name).read_bytes()
+        name: normalized_legal_file(args.directory / name)
         for name in ("LICENSE", "THIRD_PARTY_LICENSES.txt")
     }
     if any(not content for content in legal_files.values()):
