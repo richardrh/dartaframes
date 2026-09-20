@@ -15,8 +15,8 @@ class NativeDistributionTest(unittest.TestCase):
     def package_command(self, root, library, target, version, output_dir):
         license_file = root / "LICENSE"
         third_party = root / "THIRD_PARTY_LICENSES.txt"
-        license_file.write_text("project license\n")
-        third_party.write_text("dependency licenses\n")
+        license_file.write_bytes(b"project license\r\n")
+        third_party.write_bytes(b"dependency licenses\r\n")
         return [sys.executable, str(SCRIPT), "package", "--library", str(library),
                 "--target", target, "--version", version, "--output-dir", str(output_dir),
                 "--license", str(license_file), "--third-party-licenses", str(third_party)]
