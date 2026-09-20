@@ -1,7 +1,13 @@
 import unittest
 from pathlib import Path
 
-from native_exports import ExportError, defined_exports, require_abi_exports
+from native_exports import (
+    ExportError,
+    defined_exports,
+    require_abi_exports,
+    require_abi_exports_from_coff_exports,
+)
+from native_distribution import SYMBOLS
 
 
 FIXTURES = Path(__file__).with_name("testdata")
@@ -17,6 +23,15 @@ class NativeExportsTest(unittest.TestCase):
     def test_parses_macho_leading_underscores(self):
         listing = (FIXTURES / "llvm-nm-macho.txt").read_text(encoding="utf-8")
         self.assertEqual(len(require_abi_exports(listing)), 18)
+
+    def test_parses_coff_export_table(self):
+        names = "\n".join(f"    Name: {name}" for name in sorted(SYMBOLS))
+        exports = require_abi_exports_from_coff_exports(names)
+        self.assertEqual(len(exports), 18)
+
+    def test_rejects_missing_coff_export(self):
+        with self.assertRaises(ExportError):
+            require_abi_exports_from_coff_exports("    Name: df_invoke\n")
 
     def test_rejects_missing_advertised_symbol(self):
         listing = (FIXTURES / "llvm-nm-elf.txt").read_text(encoding="utf-8")
