@@ -59,6 +59,5 @@ Uri nativeReleaseDownloadUri(
     path:
         '$cleanPath/releases/download/v$nativeReleaseVersion/'
         '${artifact.rawAssetName}',
-    fragment: '',
   );
 }
