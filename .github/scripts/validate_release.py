@@ -65,8 +65,8 @@ def main() -> None:
     if args.require_promoted:
         if "rawSha256: null" in metadata or "rawSize: null" in metadata:
             raise SystemExit("native metadata is not fully promoted")
-        digests = re.findall(r"rawSha256: '([0-9a-f]{64})'", metadata)
-        sizes = [int(value) for value in re.findall(r"rawSize: ([0-9]+)", metadata)]
+        digests = re.findall(r"rawSha256:\s*'([0-9a-f]{64})'", metadata)
+        sizes = [int(value) for value in re.findall(r"rawSize:\s*([0-9]+)", metadata)]
         if len(digests) != len(TARGETS) or len(sizes) != len(TARGETS) or any(size <= 0 for size in sizes):
             raise SystemExit("native metadata has invalid promoted checksums or sizes")
     print(f"validated release contract for v{args.version}")
