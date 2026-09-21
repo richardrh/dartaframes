@@ -104,6 +104,7 @@ jobs:
           python3 tool/native_distribution.py generate-dart \
             --index release-assets/native-assets.json \
             --output regenerated/native_release_metadata.dart
+          dart format regenerated/native_release_metadata.dart
           cmp release-assets/native_release_metadata.dart regenerated/native_release_metadata.dart
           cmp lib/src/native_release_metadata.dart regenerated/native_release_metadata.dart
       - name: Upload verified release evidence
