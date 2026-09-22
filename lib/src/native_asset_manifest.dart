@@ -6,7 +6,7 @@ export 'native_release_metadata.dart';
 
 /// The code-asset identifier shared by the build hook and `@Native` bindings.
 const nativeAssetName = 'src/native_asset_bindings.dart';
-const nativeAssetId = 'package:dartaframes/$nativeAssetName';
+const nativeAssetId = 'package:dartframes/$nativeAssetName';
 
 /// The only repository identity used by native distribution code.
 ///

@@ -16,7 +16,7 @@ Verified releases will use `Polars.native()` without a local Rust toolchain.
 Use the full path to the local `.dylib`, `.so`, or `.dll`:
 
 ```dart
-import 'package:dartaframes/polars.dart';
+import 'package:dartframes/polars.dart';
 
 void main() {
   final polars = Polars.open('/path/to/libdartaframes_polars_ffi.dylib');

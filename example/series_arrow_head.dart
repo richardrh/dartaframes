@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:dartaframes/polars.dart';
+import 'package:dartframes/polars.dart';
 
 String _display(Object? value) {
   if (value == null) return 'null';

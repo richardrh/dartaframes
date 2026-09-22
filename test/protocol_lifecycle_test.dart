@@ -1,7 +1,7 @@
 import 'dart:async';
 import 'dart:ffi';
 
-import 'package:dartaframes/polars.dart';
+import 'package:dartframes/polars.dart';
 import 'package:test/test.dart';
 
 final class DelayedInvoker implements ProtocolInvoker {

@@ -1,6 +1,6 @@
 import 'dart:async';
 
-import 'package:dartaframes/polars.dart';
+import 'package:dartframes/polars.dart';
 import 'package:test/test.dart';
 
 final class ExcelInvoker implements ProtocolInvoker {

@@ -1,7 +1,7 @@
 import 'dart:io';
 import 'dart:typed_data';
 
-import 'package:dartaframes/polars.dart';
+import 'package:dartframes/polars.dart';
 import 'package:test/test.dart';
 
 void main() {

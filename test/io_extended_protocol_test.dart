@@ -1,4 +1,4 @@
-import 'package:dartaframes/polars.dart';
+import 'package:dartframes/polars.dart';
 import 'package:test/test.dart';
 
 final class IoInvoker implements ProtocolInvoker {

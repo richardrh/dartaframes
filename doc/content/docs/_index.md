@@ -4,10 +4,10 @@ linkTitle: Documentation
 weight: 1
 ---
 
-`dartaframes` is a pre-release Dart binding to Rust Polars with a Dart-native
-Apache Arrow value model. The package and native binaries are not published
-yet. Start with a source build and `Polars.open(path)`; `Polars.native()` remains
-unavailable until verified release assets exist.
+`dartframes` is a stable Dart binding to Rust Polars with a Dart-native
+Apache Arrow value model. Version 0.1.0 is published with verified native
+assets for macOS, Linux, and Windows. Start with [Getting started](/docs/getting-started/)
+or use `Polars.open(path)` for a locally built library.
 
 ## For users
 

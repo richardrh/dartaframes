@@ -3,7 +3,7 @@ import 'dart:io';
 import 'package:code_assets/code_assets.dart';
 import 'package:hooks/hooks.dart';
 
-import 'package:dartaframes/src/native_asset_manifest.dart';
+import 'package:dartframes/src/native_asset_manifest.dart';
 
 import 'native_asset_download.dart';
 

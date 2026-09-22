@@ -2,7 +2,7 @@ import 'dart:collection';
 import 'dart:convert';
 import 'dart:io';
 
-import 'package:dartaframes/polars.dart';
+import 'package:dartframes/polars.dart';
 
 /// Dart/dartaframes side of the I/O comparison. Prints one JSON report.
 void main(List<String> arguments) {

@@ -6,7 +6,7 @@
 
 Native [Polars](https://pola.rs/) and Apache Arrow data for Dart.
 
-`dartaframes` runs lazy Polars queries through a Rust native library and brings
+`dartframes` runs lazy Polars queries through a Rust native library and brings
 the results back through a Dart-native Arrow data model. It includes:
 
 - lazy CSV and Parquet scans with projection and predicate pushdown;
@@ -15,7 +15,7 @@ the results back through a Dart-native Arrow data model. It includes:
 - zero-copy-compatible Arrow C Data and C Stream interchange; and
 - bounded record-batch streaming.
 
-This is a **pre-release with partial Polars 0.55.2 coverage**. The Arrow layer is
+This is the first stable release with partial Polars 0.55.2 coverage. The Arrow layer is
 also intentionally scoped: it is a Dart port of the Arrow columnar data model
 and interchange interfaces used by this package, not a port of the complete
 Apache Arrow compute ecosystem. See [API coverage](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/api-coverage.md)
@@ -23,12 +23,11 @@ for the current surface.
 
 ## Quick start
 
-The package and native binaries are not published yet. Clone the repository,
-[build the native library with mise](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/build-from-source.md), and
-pass its path to `Polars.open`.
+The package and native binaries are published as `dartframes` 0.1.0. Install
+it from pub.dev, or [build the native library with mise](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/build-from-source.md) for local development.
 
 ```dart
-import 'package:dartaframes/polars.dart';
+import 'package:dartframes/polars.dart';
 
 void main() {
   final polars = Polars.open('/path/to/libdartaframes_polars_ffi.dylib');
@@ -64,22 +63,22 @@ in Dart. Polars frames and series can be copied into `RecordBatch` and
 standard Arrow C Data and C Stream interfaces.
 
 ```dart
-import 'package:dartaframes/arrow.dart';
+import 'package:dartframes/arrow.dart';
 ```
 
 Use this focused entrypoint when only the Dart Arrow value model is needed.
-`package:dartaframes/polars.dart` re-exports it for Polars applications. Read
+`package:dartframes/polars.dart` re-exports it for Polars applications. Read
 [Arrow interoperability](https://github.com/richardrh/dartaframes/blob/master/doc/content/docs/arrow-interchange.md) for scope,
 ownership, and examples.
 
 ```dart
-import 'package:dartaframes/arrow.dart'; // Pure Dart, no native library.
+import 'package:dartframes/arrow.dart'; // Pure Dart, no native library.
 ```
 
 Use Polars independently for native file scans and computation:
 
 ```dart
-import 'package:dartaframes/polars.dart';
+import 'package:dartframes/polars.dart';
 
 final polars = Polars.open('/path/to/libdartaframes_polars_ffi.dylib');
 final frame = polars.scanParquet('sales.parquet').collectSync();
@@ -156,8 +155,8 @@ need to be closed.
 ## Public entrypoints
 
 ```dart
-import 'package:dartaframes/polars.dart'; // Polars plus the Arrow value API.
-import 'package:dartaframes/arrow.dart';  // Arrow values without Polars APIs.
+import 'package:dartframes/polars.dart'; // Polars plus the Arrow value API.
+import 'package:dartframes/arrow.dart';  // Arrow values without Polars APIs.
 ```
 
 Most applications need only `polars.dart`.
