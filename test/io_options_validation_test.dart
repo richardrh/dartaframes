@@ -1,4 +1,4 @@
-import 'package:dartframes/polars.dart';
+import 'package:dartaframes_polars/polars.dart';
 import 'package:test/test.dart';
 
 final class _IoOptionsInvoker implements ProtocolInvoker {

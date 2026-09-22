@@ -1,6 +1,6 @@
 import 'dart:io';
 
-import 'package:dartframes/polars.dart';
+import 'package:dartaframes_polars/polars.dart';
 import 'package:test/test.dart';
 
 void main() {

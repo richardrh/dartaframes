@@ -8,10 +8,10 @@ It is more than a serialization format: the public API contains typed schemas,
 fields, arrays, scalar values, builders, and record batches.
 
 ```dart
-import 'package:dartframes/arrow.dart';
+import 'package:dartaframes_polars/arrow.dart';
 ```
 
-The primary `package:dartframes/polars.dart` entrypoint re-exports these types,
+The primary `package:dartaframes_polars/polars.dart` entrypoint re-exports these types,
 so Polars users normally need only one import.
 
 ## Choose an entrypoint
@@ -20,8 +20,8 @@ Use the two libraries independently according to where the work should run:
 
 | Import | Use it for | Native library required? |
 | --- | --- | --- |
-| `package:dartframes/arrow.dart` | Dart-owned schemas, arrays, values, builders, codecs, and record batches | No |
-| `package:dartframes/polars.dart` | CSV/Parquet scans, expressions, DataFrames, Series, SQL, and native computation | Yes |
+| `package:dartaframes_polars/arrow.dart` | Dart-owned schemas, arrays, values, builders, codecs, and record batches | No |
+| `package:dartaframes_polars/polars.dart` | CSV/Parquet scans, expressions, DataFrames, Series, SQL, and native computation | Yes |
 
 `polars.dart` re-exports the Arrow API because Polars imports and exports Arrow
 values. Importing `arrow.dart` alone does not load Polars or require Rust.
@@ -43,7 +43,7 @@ This example creates a record batch entirely in Dart. It requires no native
 library and none of its values need to be closed.
 
 ```dart
-import 'package:dartframes/arrow.dart';
+import 'package:dartaframes_polars/arrow.dart';
 
 void main() {
   final nameType = const ArrowUtf8Type();
@@ -79,7 +79,7 @@ Polars can scan files and execute a query directly. Arrow types appear only if
 you choose to export the result.
 
 ```dart
-import 'package:dartframes/polars.dart';
+import 'package:dartaframes_polars/polars.dart';
 
 void main() {
   final polars = Polars.open('/path/to/libdartaframes_polars_ffi.dylib');

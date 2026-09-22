@@ -1,7 +1,7 @@
 import 'dart:convert';
 import 'dart:typed_data';
 
-import 'package:dartframes/arrow.dart';
+import 'package:dartaframes_polars/arrow.dart';
 
 import 'dtype.dart';
 import 'value.dart';

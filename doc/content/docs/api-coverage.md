@@ -206,7 +206,7 @@ to implemented.
 
 ## Imports
 
-Consumers import `package:dartframes/polars.dart` for the
+Consumers import `package:dartaframes_polars/polars.dart` for the
 runtime/query API and the exposed `RecordBatchCodec`. `dart:convert` is only a
 consumer-side tool when JSON formatting is desired (for example, formatting a
 raw capability map); importing it does not provide dataframe or Arrow
@@ -219,7 +219,7 @@ types (`fromRecordBatch*`, `fromArrowArray*`, frame/Series `export*`, and
 `Scalar.fromArrow`). Most consumers therefore need only:
 
 ```dart
-import 'package:dartframes/polars.dart';
+import 'package:dartaframes_polars/polars.dart';
 ```
 
 `RecordBatchCodec` converts by copying owned logical values; it is not Arrow C
