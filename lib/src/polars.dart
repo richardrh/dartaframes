@@ -120,6 +120,56 @@ final class Polars {
     );
   }
 
+  /// Reads a CSV file eagerly by collecting a lazy CSV scan.
+  DataFrame readCsvSync(
+    String path, {
+    bool hasHeader = true,
+    String separator = ',',
+    int? skipRows,
+    int? nRows,
+    bool tryParseDates = false,
+    ExecutionOptions options = const ExecutionOptions(),
+  }) {
+    final input = scanCsv(
+      path,
+      hasHeader: hasHeader,
+      separator: separator,
+      skipRows: skipRows,
+      nRows: nRows,
+      tryParseDates: tryParseDates,
+    );
+    try {
+      return input.collectSync(options: options);
+    } finally {
+      input.close();
+    }
+  }
+
+  /// Reads a CSV file eagerly by collecting a lazy CSV scan.
+  Future<DataFrame> readCsv(
+    String path, {
+    bool hasHeader = true,
+    String separator = ',',
+    int? skipRows,
+    int? nRows,
+    bool tryParseDates = false,
+    ExecutionOptions options = const ExecutionOptions(),
+  }) async {
+    final input = scanCsv(
+      path,
+      hasHeader: hasHeader,
+      separator: separator,
+      skipRows: skipRows,
+      nRows: nRows,
+      tryParseDates: tryParseDates,
+    );
+    try {
+      return await input.collect(options: options);
+    } finally {
+      input.close();
+    }
+  }
+
   LazyFrame scanParquet(String path, {int? nRows, bool parallel = true}) {
     _validatePath(path);
     _validateUnsigned(nRows, 'nRows');

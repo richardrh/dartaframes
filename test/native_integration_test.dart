@@ -488,7 +488,7 @@ void main() {
       ),
     );
 
-    final csv = polars.scanCsv(csvPath, separator: ';').collectSync();
+    final csv = polars.readCsvSync(csvPath, separator: ';');
     addTearDown(csv.close);
     expect(csv.shapeSync(), (3, 2));
 
