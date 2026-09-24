@@ -389,28 +389,38 @@ def generate_dart(args: argparse.Namespace) -> None:
         records[target] = record
     if set(records) != set(TARGETS):
         raise DistributionError("reviewed index target set is incomplete")
+    write_dart_metadata(version, records, args.output)
+
+
+def initialize_dart(args: argparse.Namespace) -> None:
+    """Start a release with no trusted binaries or inherited checksums."""
+    validate_version(args.version)
+    write_dart_metadata(args.version, {}, args.output)
+
+
+def write_dart_metadata(version: str, records: dict, output: Path) -> None:
     lines = [
-        "// GENERATED FILE. Run `python3 tool/native_distribution.py generate-dart`.",
-        "// Values in this file must come from a separately reviewed native-assets.json.",
+        "// GENERATED FILE. Use tool/native_distribution.py init-dart or generate-dart.",
+        "// Non-null checksums and sizes must come from a reviewed native-assets.json.",
         "", "import 'native_release_artifact.dart';", "",
         f"const nativeReleaseVersion = {dart_string(version)};", "",
         "const nativeReleaseArtifacts = <String, NativeReleaseArtifact>{",
     ]
     for target in TARGETS:
-        record = records[target]
+        record = records.get(target)
         lines.extend([
             f"  {dart_string(target)}: NativeReleaseArtifact(",
             f"    archiveName: {dart_string(archive_name(version, target))},",
             f"    libraryName: {dart_string(TARGETS[target])},",
-            f"    rawAssetName: {dart_string(record['raw_asset'])},",
-            f"    rawSha256: {dart_string(record['raw_sha256'])},",
-            f"    rawSize: {record['raw_size']},",
+            f"    rawAssetName: {dart_string(raw_asset_name(version, target))},",
+            f"    rawSha256: {dart_string(record['raw_sha256']) if record else 'null'},",
+            f"    rawSize: {record['raw_size'] if record else 'null'},",
             "  ),",
         ])
     lines.extend(["};", ""])
-    args.output.parent.mkdir(parents=True, exist_ok=True)
-    args.output.write_text("\n".join(lines), encoding="utf-8")
-    print(args.output)
+    output.parent.mkdir(parents=True, exist_ok=True)
+    output.write_text("\n".join(lines), encoding="utf-8")
+    print(output)
 
 
 def parser() -> argparse.ArgumentParser:
@@ -437,6 +447,10 @@ def parser() -> argparse.ArgumentParser:
     generate.add_argument("--index", type=Path, required=True)
     generate.add_argument("--output", type=Path, required=True)
     generate.set_defaults(run=generate_dart)
+    initialize = commands.add_parser("init-dart", help="initialize a version with native downloads disabled")
+    initialize.add_argument("--version", required=True)
+    initialize.add_argument("--output", type=Path, required=True)
+    initialize.set_defaults(run=initialize_dart)
     return result
 
 
