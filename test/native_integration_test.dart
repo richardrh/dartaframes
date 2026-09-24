@@ -35,21 +35,8 @@ void main() {
       'job',
       'sqlContext',
       'batchStream',
-      'databaseConnection',
     ]);
-    expect(
-      hello.commands.values.cast<List<Object?>>().fold<int>(
-        0,
-        (count, commands) => count + commands.length,
-      ),
-      124,
-    );
     expect(hello.commands['expression'], contains('exprLen'));
-    expect(
-      hello.commands['frame'],
-      containsAll(['frameReadExcel', 'frameWriteExcel']),
-    );
-    expect(hello.operations['options'], contains('readExcel'));
     expect(
       (hello.operations['aggregate'] as List<Object?>),
       isNot(contains('len')),
@@ -59,52 +46,6 @@ void main() {
     expect(hello.interchange['unknownNullCount'], isFalse);
     expect(hello.operations['asyncJobEngines'], ['auto']);
     expect(hello.operations['maxActiveJobs'], 64);
-  }, skip: skipNative);
-
-  test('SQLite executes parameters and round-trips DataFrames', () {
-    final directory = Directory.systemTemp.createTempSync(
-      'dartaframes-sqlite-',
-    );
-    addTearDown(() => directory.deleteSync(recursive: true));
-    final database = polars.openSqlite('${directory.path}/people.db');
-    addTearDown(database.close);
-
-    expect(
-      database.executeSync(
-        'CREATE TABLE people (id INTEGER, name TEXT, score REAL)',
-      ),
-      0,
-    );
-    expect(
-      database.executeSync(
-        'INSERT INTO people VALUES (?1, ?2, ?3)',
-        parameters: [1, 'Ada', 9.5],
-      ),
-      1,
-    );
-    final selected = database.querySync(
-      'SELECT id, name, score FROM people WHERE id = ?1',
-      parameters: [1],
-    );
-    addTearDown(selected.close);
-    expect(selected.shapeSync(), (1, 3));
-
-    expect(database.writeFrameSync(selected, 'copied'), 1);
-    expect(
-      database.writeFrameSync(
-        selected,
-        'copied',
-        ifExists: DatabaseIfExists.append,
-      ),
-      1,
-    );
-    final count = database.querySync('SELECT count(*) AS count FROM copied');
-    addTearDown(count.close);
-    final exported = count.exportSync();
-    expect(
-      (exported.columns.single.values.single as ArrowIntegerValue).value,
-      BigInt.from(2),
-    );
   }, skip: skipNative);
 
   test('selectors and SQL execute native lazy plans end to end', () {
@@ -679,52 +620,6 @@ void main() {
     expect(job.isClosed, isTrue);
     expect(_integers((await output.export()).columns.single), [3]);
   }, skip: skipNative);
-
-  test('failed atomic write preserves an existing destination', () {
-    final directory = Directory.systemTemp.createTempSync(
-      'dartaframes-atomic-',
-    );
-    addTearDown(() => directory.deleteSync(recursive: true));
-    final path = '${directory.path}/output.parquet';
-    File(path).writeAsStringSync('preserve-me');
-    final source = polars.fromRecordBatchSync(
-      RecordBatch(ArrowSchema([ArrowField('x', ArrowIntegerType(32))]), [
-        ArrowArray(ArrowIntegerType(32), [ArrowIntegerValue(1)]),
-      ]),
-    );
-    addTearDown(source.close);
-    expect(
-      () => source.writeParquetSync(path, compression: 'invalid'),
-      throwsArgumentError,
-    );
-    expect(File(path).readAsStringSync(), 'preserve-me');
-  }, skip: skipNative);
-
-  test(
-    'successful atomic replacement preserves destination permissions',
-    () {
-      final directory = Directory.systemTemp.createTempSync(
-        'dartaframes-permissions-',
-      );
-      addTearDown(() => directory.deleteSync(recursive: true));
-      final path = '${directory.path}/output.csv';
-      final destination = File(path)..writeAsStringSync('old');
-      Process.runSync('chmod', ['640', path]);
-      final before = destination.statSync().mode & 0x1ff;
-      final source = polars.fromRecordBatchSync(
-        RecordBatch(ArrowSchema([ArrowField('x', ArrowIntegerType(32))]), [
-          ArrowArray(ArrowIntegerType(32), [ArrowIntegerValue(1)]),
-        ]),
-      );
-      addTearDown(source.close);
-      source.writeCsvSync(path);
-      expect(destination.statSync().mode & 0x1ff, before);
-      expect(destination.readAsStringSync(), contains('x'));
-    },
-    skip: Platform.isWindows
-        ? 'POSIX file permissions are unavailable'
-        : skipNative,
-  );
 }
 
 List<int?> _integers(ArrowArray array) => array.values

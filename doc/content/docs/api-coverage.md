@@ -63,7 +63,7 @@ Future variants are listed separately when the distinction matters.
 | --- | --- | --- |
 | Explicit runtime | **Implemented** | `Polars.native`, `Polars.open`, `Polars.process`, `Polars.fromClient`; capability discovery through `nativeCapabilitiesSync` and `nativeCapabilities`; diagnostic snapshots through `runtimeDiagnosticsSync` and `runtimeDiagnostics`. `Polars.native` requires promoted native release metadata. There are intentionally no runtime-free globals. |
 | Expression constructors | **Partial** | `Polars.col`, `Polars.lit`, `Polars.len`, `Polars.when`; ternary completion is `When.then(...).otherwise(...)`. No ranges, repeats, folds, horizontal aggregators, struct/list constructors, or general Python-style top-level function catalog. |
-| Data sources/constructors | **Partial** | `Polars.scanCsv`, `scanParquet`, `scanIpc`/`scanFeather`, `scanNdjson`, eager local `readExcelSync`/`readExcel`, `readJsonSync`/`readJson`, and `readIpcStreamSync`/`readIpcStream`, copied record-batch/array import, and `openSqlite` for a local owned SQLite connection. Scans and eager reads expose typed compact option sets. |
+| Data sources/constructors | **Partial** | `Polars.scanCsv`, `scanParquet`, `scanIpc`/`scanFeather`, `scanNdjson`, eager `readCsvSync`/`readCsv` (scan and collect), `readJsonSync`/`readJson`, `readIpcStreamSync`/`readIpcStream`, and copied record-batch/array import. These bind upstream Polars; database and workbook adapters are out of scope. |
 | Concatenation | **Partial** | `Polars.concat` supports `vertical`, `verticalRelaxed`, `diagonal`, `diagonalRelaxed`, and `horizontal`; vertical/diagonal modes expose `rechunk`. |
 | Resource lifecycle | **Implemented** | `Expr.isClosed`/`close`, `LazyFrame.isClosed`/`close`, `DataFrame.isClosed`/`close`, `Series.isClosed`/`close`, and `CancellableQuery.isClosed`/`close`; resources cannot be mixed across `Polars` instances. |
 
@@ -83,7 +83,7 @@ Future variants are listed separately when the distinction matters.
 | Area | Status | Public Dart API and boundary |
 | --- | --- | --- |
 | Frame lifecycle/metadata | **Implemented** | `DataFrame.isClosed`, `close`, `lazy`, `infoSync`, `info`, `schemaSync`, `schema`, `shapeSync`. |
-| Frame export/output | **Partial** | Copied batch export plus eager XLSX, CSV, Parquet, IPC/Feather file, IPC stream, JSON-array, and NDJSON local writers. XLSX creates one-sheet workbooks; local replacement uses a same-directory temporary file before persistence. |
+| Frame export/output | **Partial** | Copied batch export plus upstream Polars CSV, Parquet, IPC/Feather file, IPC stream, JSON-array, and NDJSON local writers. Output is written directly to the destination; the binding does not guarantee atomic replacement or rollback after failure. |
 | Eager transformations | **Partial** | `DataFrame.column`, `selectColumns`, `select`, `filter`, `filterMask`, `withColumns`, `sort`, `slice`, `head`, `tail`, `reverse`, `distinct`, `dropNulls`, `explode`, `unnest`, `unpivot`, `transpose`, `drop`, and `rename` execute immediately and return independent native handles. Eager group-by, join, pivot, and row iteration remain absent. |
 | `Series`/typed chunked arrays | **Partial** | `Series` has direct native lifecycle, `infoSync`/`info`, `nameSync`, `dtypeSync`, `lengthSync`, `nullCountSync`, `exportSync`/`export`, `toFrame`, `rename`, `cast`, `slice`/`head`/`tail`, `reverse`, `sort`, `filter`, `dropNulls`, `append`, `gather`, `unique`, comparisons, `+`/`-`/`*`/`/`, exact typed `sum`/`mean`/`min`/`max`/`first`/`last`, and integer `count`/`nUnique`. Namespaces and broader kernels remain absent. |
 
@@ -134,11 +134,10 @@ direct string methods remain as aliases.
 
 | Area | Status | Public Dart API and boundary |
 | --- | --- | --- |
-| CSV | **Partial** | `Polars.scanCsv`; eager and lazy writes with typed `CsvWriteOptions` for headers/BOM, delimiters, quoting, nulls, line endings, temporal/float formatting, and batching. Legacy `includeHeader`/`separator` arguments remain supported. There is no eager CSV reader or byte/stream source. |
+| CSV | **Partial** | `Polars.scanCsv`, `readCsvSync`/`readCsv` (scan and collect); eager and lazy writes with typed `CsvWriteOptions` for headers/BOM, delimiters, quoting, nulls, line endings, temporal/float formatting, and batching. Legacy `includeHeader`/`separator` arguments remain supported. No byte/stream source. |
 | Parquet | **Partial** | `Polars.scanParquet`; eager and lazy writes with typed `ParquetWriteOptions` for compression, row-group/page sizing, and statistics. Eager writes additionally expose column serialization parallelism. Legacy `compression` remains supported. No metadata API, cloud options, or partitioned dataset interface. |
-| XLSX | **Partial** | Eager `Polars.readExcelSync`/`readExcel` and `DataFrame.writeExcelSync`/`writeExcel` use typed `ExcelReadOptions`/`ExcelWriteOptions`. One worksheet is read or written per call. Reading supports header replacement, generated names, bounded/all-row inference, and scalar null/bool/integer/float/string/date/datetime conversion. Writing creates a new workbook and atomically replaces local output after successful serialization. Mixed incompatible input and nested/unsupported output columns are rejected. There is no workbook editing, formulas API, styles API, multi-sheet call, `.xls`, or lazy scan. |
 | Lazy sinks | **Partial** | Native synchronous streaming sinks are exposed as `sinkCsvSync`, `sinkParquetSync`, `sinkIpcSync`/`sinkFeatherSync`, and `sinkNdjsonSync`, with compatibility wrappers without `Sync`. Format and sink options remain deliberately narrow. |
-| Other native formats/sources | **Partial** | Local IPC/Feather scan/write, IPC-stream eager read/write, JSON-array eager read/write, and NDJSON scan/write are implemented. Owned local SQLite connections support parameterized query/execute and transactional DataFrame writes with fail/replace/append policies. Avro, cloud/object-store, HTTP, remote databases, and table formats remain deferred. |
+| Other native formats/sources | **Partial** | Upstream Polars local IPC/Feather scan/write, IPC-stream eager read/write, JSON-array eager read/write, and NDJSON scan/write are implemented. No workbook or database connectors are implemented by this binding. Avro and native cloud/object-store I/O are not exposed. |
 | Copied owned-batch interchange | **Partial** | `RecordBatchCodec.encode`/`decode`, `Polars.fromRecordBatchSync`/`fromRecordBatch`, and `DataFrame.exportSync`/`export`. Columns are copied through JSON-compatible logical values; the practical full path is the flat supported subset through `time`. Nested/category/extension paths are not materialized. |
 | Arrow standards interchange | **Partial** | `DataFrame.exportArrowC`, `Series.exportArrowC`, `Polars.fromArrowCData`, `seriesFromArrowCData`, `DataFrame.exportArrowCStream`, and bounded `Polars.fromArrowCStream` expose Arrow C Data/C Stream ownership for the supported flat tranche. IPC file/stream I/O is separate. |
 
@@ -197,8 +196,8 @@ to implemented.
    declared literal/import/export/cast boundary.
 2. Broaden lazy and eager operations only in coherent, signature-verified
    tranches with explicit option validation and lifecycle tests.
-3. Add remaining reshape families such as pivot and transpose, plus explicit
-   window frame bounds, without implying general Polars parity.
+3. Expose additional operations only when supported by the pinned Polars Rust
+   API; do not emulate missing query, window, or storage behavior.
 4. Deepen streaming, diagnostics, and I/O controls while retaining bounded
    memory, closed protocol schemas, and deterministic ownership.
 5. Keep cloud, database, table-format, and host-ecosystem adapters separately
