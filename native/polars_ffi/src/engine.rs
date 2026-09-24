@@ -5,12 +5,11 @@ use crate::{
     jobs::Job,
     namespace_expr,
     registry::{self, Entry},
-    selectors, sql, sqlite, temporal_relational,
+    selectors, sql, temporal_relational,
 };
 use polars::prelude::*;
 use serde_json::{json, Value};
-use std::{num::NonZeroUsize, path::Path};
-use tempfile::NamedTempFile;
+use std::{fs::File, num::NonZeroUsize};
 
 fn response(handle: u64, kind: &str) -> Value {
     json!({"handle":handle.to_string(),"kind":kind})
@@ -55,17 +54,11 @@ pub fn invoke(bytes: &[u8]) -> Result<Value> {
     if let Some(payload) = io_extended::dispatch(command, &r)? {
         return envelope(payload);
     }
-    if let Some(payload) = crate::xlsx::dispatch(command, &r)? {
-        return envelope(payload);
-    }
     if command.starts_with("selector") || command.starts_with("dtypeSelector") {
         return envelope(selectors::invoke(command, &r)?);
     }
     if command.starts_with("sqlContext") {
         return envelope(sql::invoke(command, &r)?);
-    }
-    if command.starts_with("databaseConnection") {
-        return envelope(sqlite::invoke(command, &r)?);
     }
     let payload = match command {
         "hello" => {
@@ -691,22 +684,6 @@ fn parquet_statistics(v: &Value) -> Result<StatisticsOptions> {
             .transpose()?,
     })
 }
-fn temporary(path: &str) -> Result<NamedTempFile> {
-    let parent = Path::new(path)
-        .parent()
-        .filter(|x| !x.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    let file = NamedTempFile::new_in(parent)?;
-    if let Ok(metadata) = std::fs::metadata(path) {
-        file.as_file().set_permissions(metadata.permissions())?;
-    }
-    Ok(file)
-}
-fn persist(file: NamedTempFile, path: &str) -> Result<()> {
-    file.persist(path)
-        .map(|_| ())
-        .map_err(|e| EngineError::Io(e.error.to_string()))
-}
 fn write_csv(v: &Value) -> Result<Value> {
     let mut df = registry::frame(b::handle(v, "frame")?)?;
     let p = path(v)?;
@@ -721,7 +698,7 @@ fn write_csv(v: &Value) -> Result<Value> {
     if sep.len() != 1 {
         return Err(EngineError::Invalid("separator must be one byte".into()));
     }
-    let mut f = temporary(p)?;
+    let mut f = File::create(p)?;
     let quote_style = match optional_string(v, "quoteStyle", "necessary")? {
         "necessary" => QuoteStyle::Necessary,
         "always" => QuoteStyle::Always,
@@ -733,7 +710,7 @@ fn write_csv(v: &Value) -> Result<Value> {
             )))
         }
     };
-    let mut writer = CsvWriter::new(f.as_file_mut())
+    let mut writer = CsvWriter::new(&mut f)
         .include_header(b::optional_bool(v, "includeHeader", true)?)
         .include_bom(b::optional_bool(v, "includeBom", false)?)
         .with_separator(sep.as_bytes()[0])
@@ -755,7 +732,6 @@ fn write_csv(v: &Value) -> Result<Value> {
         writer = writer.n_threads(n_threads);
     }
     writer.finish(&mut df)?;
-    persist(f, p)?;
     Ok(json!({"path":p}))
 }
 fn write_parquet(v: &Value) -> Result<Value> {
@@ -782,15 +758,14 @@ fn write_parquet(v: &Value) -> Result<Value> {
             )))
         }
     };
-    let mut f = temporary(p)?;
-    ParquetWriter::new(f.as_file_mut())
+    let mut f = File::create(p)?;
+    ParquetWriter::new(&mut f)
         .with_compression(compression)
         .with_statistics(parquet_statistics(v)?)
         .with_row_group_size(positive_usize_opt(v, "rowGroupSize")?)
         .with_data_page_size(positive_usize_opt(v, "dataPageSize")?)
         .set_parallel(b::optional_bool(v, "parallel", true)?)
         .finish(&mut df)?;
-    persist(f, p)?;
     Ok(json!({"path":p}))
 }
 
@@ -851,7 +826,7 @@ fn hello() -> Value {
         "polars": "0.55.2",
         "datatypes": DATATYPES,
         "datatypeCapabilities": datatype_capabilities,
-        "resources": ["expr", "selector", "dtypeSelector", "lazyFrame", "frame", "series", "job", "sqlContext", "batchStream", "databaseConnection"],
+        "resources": ["expr", "selector", "dtypeSelector", "lazyFrame", "frame", "series", "job", "sqlContext", "batchStream"],
         "interchange": {
             "arrowCDataVersion": 1,
             "arrowCStreamVersion": 1,
@@ -869,14 +844,13 @@ fn hello() -> Value {
         },
         "commands": {
             "core": ["hello", "runtimeDiagnostics"],
-            "frame": ["frameImport", "frameInfo", "frameExport", "frameLazy", "frameReadExcel", "frameReadJson", "frameReadIpcStream", "frameWriteCsv", "frameWriteExcel", "frameWriteParquet", "frameWriteIpc", "frameWriteIpcStream", "frameWriteJson", "frameWriteNdjson", "frameColumn", "frameSelectColumns", "frameSelect", "frameFilter", "frameFilterMask", "frameWithColumns", "frameSort", "frameSlice", "frameReverse", "frameDistinct", "frameDropNulls", "frameExplode", "frameUnnest", "frameUnpivot", "frameTranspose", "frameDrop", "frameRename"],
+            "frame": ["frameImport", "frameInfo", "frameExport", "frameLazy", "frameReadJson", "frameReadIpcStream", "frameWriteCsv", "frameWriteParquet", "frameWriteIpc", "frameWriteIpcStream", "frameWriteJson", "frameWriteNdjson", "frameColumn", "frameSelectColumns", "frameSelect", "frameFilter", "frameFilterMask", "frameWithColumns", "frameSort", "frameSlice", "frameReverse", "frameDistinct", "frameDropNulls", "frameExplode", "frameUnnest", "frameUnpivot", "frameTranspose", "frameDrop", "frameRename"],
             "series": ["seriesImport", "seriesInfo", "seriesExport", "seriesToFrame", "seriesRename", "seriesCast", "seriesSlice", "seriesReverse", "seriesSort", "seriesFilter", "seriesDropNulls", "seriesAppend", "seriesGather", "seriesUnique", "seriesBinary", "seriesAggregate"],
             "job": ["lazyCollect", "lazySubmit", "lazyProfile", "jobPoll", "jobCancel", "jobTake", "lazyBatchStream", "batchStreamPoll", "batchStreamCancel"],
             "expression": ["exprColumn", "exprLiteral", "exprLen", "exprAlias", "exprCast", "exprUnary", "exprBinary", "exprTernary", "exprAggregate", "exprFunction", "exprMeta", "exprOver"],
             "selector": ["selectorAll", "selectorEmpty", "selectorByName", "selectorByIndex", "selectorMatches", "selectorBinary", "selectorNot", "selectorAsExpr"],
             "dtypeSelector": ["dtypeSelectorCreate", "dtypeSelectorBinary", "dtypeSelectorNot", "dtypeSelectorAsSelector", "dtypeSelectorMatches"],
             "sql": ["sqlContextNew", "sqlContextRegister", "sqlContextRegisterAll", "sqlContextUnregister", "sqlContextTables", "sqlContextExecute"],
-            "database": ["databaseConnectionOpenSqlite", "databaseConnectionQuery", "databaseConnectionExecute", "databaseConnectionWriteFrame"],
             "lazy": ["lazyScanCsv", "lazyScanParquet", "lazyScanIpc", "lazyScanNdjson", "lazySinkCsv", "lazySinkParquet", "lazySinkIpc", "lazySinkNdjson", "lazySelect", "lazySelectInputs", "lazyFilter", "lazyWithColumns", "lazyWithColumnsInputs", "lazySort", "lazySlice", "lazyGroupBy", "lazyGroupByDynamic", "lazyGroupByRolling", "lazyJoin", "lazyJoinAsOf", "lazyJoinWhere", "lazyDistinct", "lazyDropNulls", "lazyDrop", "lazyRename", "lazyExplode", "lazyUnnest", "lazyUnpivot", "lazyConcat", "lazySchema", "lazyExplain"]
         },
         "operations": {
@@ -892,7 +866,6 @@ fn hello() -> Value {
             "qualifiedFunctions": ["str.lenBytes", "str.lenChars", "str.toLowercase", "str.toUppercase", "str.contains", "str.startsWith", "str.endsWith", "str.find", "str.extract", "str.extractAll", "str.split", "str.replace", "str.stripChars", "str.stripCharsStart", "str.stripCharsEnd", "str.stripPrefix", "str.stripSuffix", "str.slice", "str.head", "str.tail", "str.padStart", "str.padEnd", "str.zfill", "str.toDate", "str.toTime", "str.toDatetime", "dt.year", "dt.isoYear", "dt.month", "dt.day", "dt.ordinalDay", "dt.weekday", "dt.week", "dt.quarter", "dt.hour", "dt.minute", "dt.second", "dt.millisecond", "dt.microsecond", "dt.nanosecond", "dt.date", "dt.time", "dt.timestamp", "dt.format", "dt.truncate", "dt.round", "dt.offsetBy", "dt.convertTimeZone", "dt.baseUtcOffset", "dt.dstOffset", "list.len", "list.first", "list.last", "list.sum", "list.min", "list.max", "list.mean", "list.get", "list.contains", "list.sort", "list.slice", "arr.len", "arr.sum", "arr.min", "arr.max", "arr.mean", "arr.toList", "arr.get", "arr.contains", "arr.sort", "arr.explode", "struct.field", "struct.fieldAt", "struct.renameFields", "struct.jsonEncode", "bin.sizeBytes", "bin.contains", "bin.startsWith", "bin.endsWith", "bin.hexEncode", "bin.base64Encode", "cat.physical", "cat.categories", "name.keep", "name.prefix", "name.suffix", "name.toLowercase", "name.toUppercase", "meta.undoAliases"],
             "expressionMetadata": ["rootNames", "outputName", "isColumn", "isColumnSelection", "isLiteral", "hasMultipleOutputs", "isRegexProjection"],
             "options": {
-                "sqlite": ["bundled", "localFilesystemOnly", "positionalScalarParameters", "ifExists=fail|replace|append", "maxParameters=10000", "maxQueryRows=10000000"],
                 "cast": ["strict"],
                 "std": ["ddof"], "variance": ["ddof"],
                 "quantile": ["quantile", "interpolation=nearest|lower|higher|midpoint|linear"],
@@ -942,8 +915,6 @@ fn hello() -> Value {
                 "scanNdjson": ["path", "nRows", "inferSchemaLength", "ignoreErrors", "lowMemory", "rechunk"],
                 "readJson": ["path", "inferSchemaLength", "batchSize", "rechunk"],
                 "readIpcStream": ["path", "nRows", "columns", "rechunk"],
-                "readExcel": ["path", "worksheet=first", "hasHeader", "columnNames", "inferSchemaLength=positive|null", "types=null|boolean|int64|float64|string|date|datetime-ms", "mixedColumns=reject"],
-                "writeExcel": ["path", "worksheet=Sheet1", "includeHeader", "dateFormat", "datetimeFormat", "newWorkbook", "oneWorksheet", "atomicReplace", "types=null|boolean|integer-exact53|float-finite|string|date|datetime-naive"],
                 "writeIpc": ["path", "compression=none|lz4|zstd", "recordBatchSize", "parallel", "recordBatchStatistics"],
                 "writeIpcStream": ["path", "compression=none|lz4|zstd"],
                 "writeJson": ["path", "format=json"],
@@ -1023,30 +994,6 @@ mod tests {
     #[test]
     fn hello_is_complete_and_operation_registry_is_truthful() {
         let value = hello();
-        assert_eq!(value["datatypes"].as_array().unwrap().len(), 31);
-        assert_eq!(value["datatypeCapabilities"].as_array().unwrap().len(), 31);
-        assert_eq!(
-            value["resources"],
-            json!([
-                "expr",
-                "selector",
-                "dtypeSelector",
-                "lazyFrame",
-                "frame",
-                "series",
-                "job",
-                "sqlContext",
-                "batchStream",
-                "databaseConnection"
-            ])
-        );
-        let command_count: usize = value["commands"]
-            .as_object()
-            .unwrap()
-            .values()
-            .map(|commands| commands.as_array().unwrap().len())
-            .sum();
-        assert_eq!(command_count, 124);
         assert!(value["commands"]["expression"]
             .as_array()
             .unwrap()

@@ -5,6 +5,14 @@ change, open an issue so its scope and ownership semantics can be agreed.
 
 By participating, you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
+## Binding-only scope
+
+Expose upstream Polars behavior and the Arrow conversion needed for FFI.
+Do not implement query kernels, rewrite SQL, emulate unsupported operations,
+or add workbook/database adapters with independent inference or coercion rules.
+Keep ownership, error translation, and FFI boundary validation in the binding.
+Missing upstream functionality remains unsupported rather than being emulated.
+
 ## Set up
 
 The easiest setup uses [mise](https://mise.jdx.dev/):

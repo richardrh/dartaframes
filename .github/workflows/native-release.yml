@@ -281,6 +281,10 @@ jobs:
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
+      - name: Set up Dart for canonical metadata formatting
+        uses: dart-lang/setup-dart@e51d8e571e22473a2ddebf0ef8a2123f0ab2c02c # v1.7.1
+        with:
+          sdk: 3.13.0
       - name: Download matrix assets
         if: ${{ !inputs.upload_to_draft }}
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
@@ -309,6 +313,7 @@ jobs:
           python3 tool/native_distribution.py generate-dart \
             --index dist/native-assets.json \
             --output dist/native_release_metadata.dart
+          dart format dist/native_release_metadata.dart
           if [[ '${{ inputs.upload_to_draft }}' == 'true' ]]; then
             cmp dist/native_release_metadata.dart lib/src/native_release_metadata.dart
           fi
@@ -321,7 +326,9 @@ jobs:
           retention-days: 30
 
   upload-draft:
-    if: inputs.upload_to_draft
+    # A build-only dependency is intentionally skipped during promotion.
+    # Override implicit success() so that skip does not suppress this job.
+    if: ${{ !cancelled() && inputs.upload_to_draft && needs.prepare.result == 'success' && needs.verify-release-set.result == 'success' }}
     needs: [prepare, verify-release-set]
     runs-on: ubuntu-24.04
     timeout-minutes: 10

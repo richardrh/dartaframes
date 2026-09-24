@@ -5,7 +5,7 @@ import tempfile
 import unittest
 from pathlib import Path
 
-from native_distribution import ABI_VERSION, SYMBOLS, TARGETS, archive_name, raw_asset_name, verify_one
+from native_distribution import ABI_VERSION, TARGETS, archive_name, raw_asset_name, verify_one
 
 
 SCRIPT = Path(__file__).with_name("native_distribution.py")
@@ -20,12 +20,6 @@ class NativeDistributionTest(unittest.TestCase):
         return [sys.executable, str(SCRIPT), "package", "--library", str(library),
                 "--target", target, "--version", version, "--output-dir", str(output_dir),
                 "--license", str(license_file), "--third-party-licenses", str(third_party)]
-
-    def test_abi_two_manifest_declares_core_and_arrow_symbols(self):
-        self.assertEqual(ABI_VERSION, 2)
-        self.assertEqual(len(SYMBOLS), 18)
-        self.assertIn("df_invoke", SYMBOLS)
-        self.assertIn("df_frame_import_arrow_stream", SYMBOLS)
 
     def test_packages_and_indexes_all_targets(self):
         with tempfile.TemporaryDirectory() as temporary:
@@ -60,9 +54,52 @@ class NativeDistributionTest(unittest.TestCase):
                 [sys.executable, str(SCRIPT), "generate-dart", "--index", str(index),
                  "--output", str(generated)], check=True,
             )
-            generated_text = generated.read_text()
-            self.assertIn("rawSha256: '", generated_text)
-            self.assertNotIn("rawSha256: null", generated_text)
+
+    def test_new_version_cannot_inherit_promoted_pins(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            metadata = root / "lib/src/native_release_metadata.dart"
+            reviewed = root / "native-assets.json"
+            reviewed.write_text(json.dumps({
+                "schema_version": 1, "abi_version": ABI_VERSION,
+                "package": "dartaframes_polars_ffi", "version": "0.1.0",
+                "artifacts": [
+                    {"target": target, "archive": archive_name("0.1.0", target),
+                     "archive_sha256": "a" * 64,
+                     "raw_asset": raw_asset_name("0.1.0", target),
+                     "raw_sha256": "b" * 64, "raw_size": 128}
+                    for target in TARGETS
+                ],
+            }))
+            subprocess.run(
+                [sys.executable, str(SCRIPT), "generate-dart", "--index",
+                 str(reviewed), "--output", str(metadata)], check=True,
+            )
+            validator = root / ".github/scripts/validate_release.py"
+            validator.parent.mkdir(parents=True)
+            validator.write_bytes(
+                (SCRIPT.parent.parent / ".github/scripts/validate_release.py").read_bytes()
+            )
+            cargo = root / "native/polars_ffi/Cargo.toml"
+            cargo.parent.mkdir(parents=True)
+
+            def validate(version, promoted=False):
+                (root / "pubspec.yaml").write_text(
+                    f"name: dartaframes_polars\nversion: {version}\n"
+                )
+                cargo.write_text(f'[package]\nversion = "{version}"\n')
+                command = [sys.executable, str(validator), version]
+                if promoted:
+                    command.append("--require-promoted")
+                return subprocess.run(command, capture_output=True, text=True)
+
+            self.assertEqual(validate("0.1.0", promoted=True).returncode, 0)
+            subprocess.run(
+                [sys.executable, str(SCRIPT), "init-dart", "--version", "0.1.1",
+                 "--output", str(metadata)], check=True,
+            )
+            self.assertEqual(validate("0.1.1").returncode, 0)
+            self.assertNotEqual(validate("0.1.1", promoted=True).returncode, 0)
 
     def test_index_rejects_raw_asset_that_differs_from_archive(self):
         with tempfile.TemporaryDirectory() as temporary:

@@ -5,18 +5,19 @@ weight: 10
 
 ## Current status
 
-Native binaries are not published yet. The native-assets build hook stays
-inactive while release metadata is null, so ordinary Dart builds emit no native
-asset. `Polars.native()` will work only after maintainers verify and publish the
-binaries, then add their checksums and sizes to the package.
+Version 0.1.0 is published. The 0.1.1 source candidate removes the custom
+database and workbook adapters and requires newly built native libraries.
+Its generated metadata intentionally has no trusted hashes or sizes until
+the new five-target build is reviewed; it must not download 0.1.0 binaries.
 
-For now, source users build the library and use `Polars.open(path)`.
-`Polars.process()` remains an explicit expert API. Nothing downloads or builds
-native code automatically.
+While the candidate is unpromoted, source users build the library and use
+`Polars.open(path)` or the custom-library hook option. `Polars.native()` becomes
+available once the matching binaries are published and their pins promoted.
+The hook does not compile Rust automatically.
 
 ## User experience after release
 
-Ordinary users will add `dartaframes` from pub.dev and call `Polars.native()`.
+Ordinary users add `dartaframes_polars` from pub.dev and call `Polars.native()`.
 The package build hook will choose the matching macOS, Linux, or Windows binary,
 verify its pinned size and SHA-256, cache it, and bundle it with the application.
 Users will not need Rust, `mise`, or a manual library path.

@@ -13,15 +13,14 @@ every native asset so the release is self-contained; upstream license texts
 remain available from the corresponding crates.io package sources.
 
 Project dependency roots:
-- polars 0.55.2 and polars-arrow/polars-utils 0.55.2 (MIT OR Apache-2.0)
-- rusqlite 0.37 (MIT)
-- calamine 0.36.1 (MIT OR Apache-2.0)
-- rust_xlsxwriter 0.99.0 (MIT OR Apache-2.0)
-- serde 1 (MIT OR Apache-2.0)
-- chrono 0.4 (MIT OR Apache-2.0)
-- parking_lot 0.12 (MIT OR Apache-2.0)
-- tempfile 3 (MIT OR Apache-2.0)
-- thiserror 2 (MIT OR Apache-2.0)
+- base64 0.23.1 (MIT OR Apache-2.0)
+- either 1.18.0 (MIT OR Apache-2.0)
+- parking_lot 0.12.5 (MIT OR Apache-2.0)
+- polars 0.55.2 and polars-utils 0.55.2 (MIT)
+- polars-arrow 0.55.2 (MIT AND Apache-2.0)
+- serde 1.0.229 (MIT OR Apache-2.0)
+- serde_json 1.0.151 (MIT OR Apache-2.0)
+- thiserror 2.0.20 (MIT OR Apache-2.0)
 
 This inventory must be regenerated and independently reviewed whenever the
 locked native dependency graph changes.

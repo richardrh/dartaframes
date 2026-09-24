@@ -157,7 +157,10 @@ fn aggregate(v: &Value) -> Result<Value> {
     let series = registry::series(b::handle(v, "series")?)?;
     let op = b::string(v, "op")?;
     match op {
-        "count" => return Ok(json!({"value":series.len() - series.null_count()})),
+        "count" => {
+            let result = evaluate_unary(series, col(LEFT).count())?;
+            return Ok(json!({"value": result.idx()?.get(0)}));
+        }
         "nUnique" => return Ok(json!({"value":series.n_unique()?})),
         _ => {}
     }

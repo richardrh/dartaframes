@@ -1,10 +1,9 @@
-use std::{fs::File, num::NonZeroUsize, path::Path, sync::Arc};
+use std::{fs::File, num::NonZeroUsize, sync::Arc};
 
 use polars::lazy::prelude::{FileWriteFormat, SinkDestination, SinkTarget, UnifiedSinkArgs};
 use polars::prelude::*;
 use polars_utils::{pl_path::PlRefPath, slice_enum::Slice};
 use serde_json::{json, Value};
-use tempfile::NamedTempFile;
 
 use crate::{
     bindings as b,
@@ -60,24 +59,6 @@ fn names_opt(v: &Value, key: &str) -> Result<Option<Vec<String>>> {
     v.get(key)
         .map(|_| b::names(v, key).map(|names| names.into_iter().map(|x| x.to_string()).collect()))
         .transpose()
-}
-
-fn temporary(path: &str) -> Result<NamedTempFile> {
-    let parent = Path::new(path)
-        .parent()
-        .filter(|x| !x.as_os_str().is_empty())
-        .unwrap_or_else(|| Path::new("."));
-    let file = NamedTempFile::new_in(parent)?;
-    if let Ok(metadata) = std::fs::metadata(path) {
-        file.as_file().set_permissions(metadata.permissions())?;
-    }
-    Ok(file)
-}
-
-fn persist(file: NamedTempFile, path: &str) -> Result<()> {
-    file.persist(path)
-        .map(|_| ())
-        .map_err(|e| EngineError::Io(e.error.to_string()))
 }
 
 fn ipc_compression(v: &Value) -> Result<Option<IpcCompression>> {
@@ -219,10 +200,10 @@ fn read_ipc_stream(v: &Value) -> Result<Value> {
 fn write_frame(v: &Value, format: &str) -> Result<Value> {
     let mut frame = registry::frame(b::handle(v, "frame")?)?;
     let output = path(v)?;
-    let mut file = temporary(output)?;
+    let mut file = File::create(output)?;
     match format {
         "ipc" => {
-            IpcWriter::new(file.as_file_mut())
+            IpcWriter::new(&mut file)
                 .with_compression(ipc_compression(v)?)
                 .with_record_batch_size(usize_opt(v, "recordBatchSize")?)
                 .with_parallel(b::optional_bool(v, "parallel", true)?)
@@ -230,30 +211,27 @@ fn write_frame(v: &Value, format: &str) -> Result<Value> {
                 .finish(&mut frame)?;
         }
         "ipcStream" => {
-            IpcStreamWriter::new(file.as_file_mut())
+            IpcStreamWriter::new(&mut file)
                 .with_compression(ipc_compression(v)?)
                 .finish(&mut frame)?;
         }
         "json" => {
-            JsonWriter::new(file.as_file_mut())
+            JsonWriter::new(&mut file)
                 .with_json_format(JsonFormat::Json)
                 .finish(&mut frame)?;
         }
         "ndjson" => {
-            JsonWriter::new(file.as_file_mut())
+            JsonWriter::new(&mut file)
                 .with_json_format(JsonFormat::JsonLines)
                 .finish(&mut frame)?;
         }
         _ => unreachable!(),
     }
-    persist(file, output)?;
     Ok(json!({"path":output}))
 }
 
 fn sink(v: &Value, format: &str) -> Result<Value> {
     let output = path(v)?;
-    let file = temporary(output)?;
-    let temp_path = PlRefPath::try_from_path(file.path())?;
     let file_format = match format {
         "csv" => {
             let separator = v
@@ -327,7 +305,7 @@ fn sink(v: &Value, format: &str) -> Result<Value> {
     registry::lazy_frame(b::handle(v, "input")?)?
         .sink(
             SinkDestination::File {
-                target: SinkTarget::Path(temp_path),
+                target: SinkTarget::Path(PlRefPath::new(output)),
             },
             file_format,
             UnifiedSinkArgs {
@@ -336,7 +314,6 @@ fn sink(v: &Value, format: &str) -> Result<Value> {
             },
         )?
         .collect()?;
-    persist(file, output)?;
     Ok(json!({"path":output,"execution":"nativeLazySink"}))
 }
 

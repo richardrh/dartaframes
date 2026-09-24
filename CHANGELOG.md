@@ -1,5 +1,23 @@
 # Changelog
 
+## 0.1.1
+
+- **Breaking:** removed the custom SQLite connection and XLSX reader/writer
+  APIs, their native implementations, protocol commands, and dependencies.
+  Polars `SqlContext` over registered frames remains supported.
+- **Breaking:** removed binding-owned atomic file replacement. Polars writers
+  and lazy sinks now write directly to the destination; failed writes may leave
+  partial output.
+- Add `readCsvSync` and `readCsv` as conveniences over Polars scan and collect.
+- Delegate Series non-null counts to Polars' count expression.
+- Keep the package limited to upstream Polars bindings and necessary Arrow/FFI
+  conversion, ownership, and validation.
+- Require newly built 0.1.1 native binaries; 0.1.0 binaries are not reused.
+- Add `init-dart` release initialization with native downloads disabled until
+  reviewed checksums are promoted.
+- Fix draft-upload scheduling after skipped build jobs and format generated
+  native metadata consistently throughout release staging.
+
 ## 0.1.0
 
 - Initial stable release of the direct native-handle Dart binding to Rust
