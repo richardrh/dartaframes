@@ -1,0 +1,135 @@
+{
+ "family": "union",
+ "name": "unions",
+ "description": "sparse (custom type codes) and dense unions",
+ "files": {
+  "file": "unions.arrow",
+  "stream": "unions.arrows"
+ },
+ "write_options": {},
+ "optional": false,
+ "schema": {
+  "fields": [
+   {
+    "name": "sparse",
+    "nullable": true,
+    "type": {
+     "id": "sparse_union",
+     "type_codes": [
+      5,
+      7
+     ],
+     "children": [
+      {
+       "name": "i",
+       "nullable": true,
+       "type": {
+        "id": "int64"
+       }
+      },
+      {
+       "name": "s",
+       "nullable": true,
+       "type": {
+        "id": "utf8"
+       }
+      }
+     ]
+    }
+   },
+   {
+    "name": "dense",
+    "nullable": true,
+    "type": {
+     "id": "dense_union",
+     "type_codes": [
+      0,
+      1,
+      2
+     ],
+     "children": [
+      {
+       "name": "f",
+       "nullable": true,
+       "type": {
+        "id": "float64"
+       }
+      },
+      {
+       "name": "s",
+       "nullable": true,
+       "type": {
+        "id": "utf8"
+       }
+      },
+      {
+       "name": "b",
+       "nullable": true,
+       "type": {
+        "id": "bool"
+       }
+      }
+     ]
+    }
+   }
+  ]
+ },
+ "num_rows": 5,
+ "batch_row_counts": [
+  5
+ ],
+ "columns": [
+  {
+   "name": "sparse",
+   "null_count": 0,
+   "values": [
+    {
+     "type_code": 5,
+     "value": "1"
+    },
+    {
+     "type_code": 7,
+     "value": "b"
+    },
+    {
+     "type_code": 5,
+     "value": null
+    },
+    {
+     "type_code": 7,
+     "value": null
+    },
+    {
+     "type_code": 5,
+     "value": "5"
+    }
+   ]
+  },
+  {
+   "name": "dense",
+   "null_count": 0,
+   "values": [
+    {
+     "type_code": 0,
+     "value": "0x3ff8000000000000"
+    },
+    {
+     "type_code": 1,
+     "value": "x"
+    },
+    {
+     "type_code": 0,
+     "value": null
+    },
+    {
+     "type_code": 2,
+     "value": true
+    },
+    {
+     "type_code": 1,
+     "value": "y"
+    }
+   ]
+  }
+ ]
+}
