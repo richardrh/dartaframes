@@ -38,6 +38,13 @@ void main() {
       ArrowDecimalType(3, 4),
       ArrowListType(ArrowField('item', ArrowFixedSizeBinaryType(4))),
       ArrowStructType([ArrowField('nested', ArrowFixedSizeBinaryType(4))]),
+      ArrowStructType([
+        ArrowField('same', const ArrowUtf8Type()),
+        ArrowField('same', const ArrowUtf8Type()),
+      ], allowDuplicateNames: true),
+      ArrowStructType([
+        ArrowField('', const ArrowUtf8Type(), allowEmptyName: true),
+      ]),
       ArrowExtensionType('example.fixed', ArrowFixedSizeBinaryType(4)),
     ];
     for (final type in additions) {

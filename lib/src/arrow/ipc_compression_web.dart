@@ -14,30 +14,7 @@ Uint8List decompressIpcBuffer(int codec, Uint8List input, int expectedLength) {
   if (source.u32() != 0x184d2204) {
     throw const FormatException('Invalid LZ4 frame magic');
   }
-  final flags = source.byte();
-  final descriptor = source.byte();
-  if ((flags >> 6) != 1 || (flags & 2) != 0 || (descriptor & 0x8f) != 0) {
-    throw const FormatException('Invalid LZ4 frame descriptor');
-  }
-  if ((flags & 1) != 0) {
-    throw UnsupportedError('LZ4 external dictionaries are unsupported');
-  }
-  final maximum = switch ((descriptor >> 4) & 7) {
-    4 => 64 * 1024,
-    5 => 256 * 1024,
-    6 => 1024 * 1024,
-    7 => 4 * 1024 * 1024,
-    _ => throw const FormatException('Invalid LZ4 maximum block size'),
-  };
-  if ((flags & 8) != 0) {
-    final low = source.u32();
-    final high = source.u32();
-    final declared = (BigInt.from(high) << 32) | BigInt.from(low);
-    if (declared != BigInt.from(expectedLength)) {
-      throw const FormatException('LZ4 frame and IPC sizes disagree');
-    }
-  }
-  source.byte(); // Header checksum; see function documentation.
+  final (flags, maximum) = _readFrameHeader(source, expectedLength);
   final output = _Output(expectedLength);
   while (true) {
     final descriptor = source.u32();
@@ -63,6 +40,34 @@ Uint8List decompressIpcBuffer(int codec, Uint8List input, int expectedLength) {
     throw const FormatException('LZ4 frame size or trailing data mismatch');
   }
   return output.bytes;
+}
+
+(int, int) _readFrameHeader(_Cursor source, int expectedLength) {
+  final flags = source.byte();
+  final descriptor = source.byte();
+  if ((flags >> 6) != 1 || (flags & 2) != 0 || (descriptor & 0x8f) != 0) {
+    throw const FormatException('Invalid LZ4 frame descriptor');
+  }
+  if ((flags & 1) != 0) {
+    throw UnsupportedError('LZ4 external dictionaries are unsupported');
+  }
+  final maximum = switch ((descriptor >> 4) & 7) {
+    4 => 64 * 1024,
+    5 => 256 * 1024,
+    6 => 1024 * 1024,
+    7 => 4 * 1024 * 1024,
+    _ => throw const FormatException('Invalid LZ4 maximum block size'),
+  };
+  if ((flags & 8) != 0) {
+    final low = source.u32();
+    final high = source.u32();
+    final declared = (BigInt.from(high) << 32) | BigInt.from(low);
+    if (declared != BigInt.from(expectedLength)) {
+      throw const FormatException('LZ4 frame and IPC sizes disagree');
+    }
+  }
+  source.byte(); // Header checksum; see public function documentation.
+  return (flags, maximum);
 }
 
 void _decodeBlock(Uint8List bytes, _Output output, int historyStart) {

@@ -66,6 +66,49 @@ void main() {
       throwsFormatException,
     );
   });
+  test('frame header flags and block bounds are validated', () {
+    for (final (position, value) in [(4, 0), (4, 0x62), (5, 0x41), (5, 0x30)]) {
+      final invalid = Uint8List.fromList(repeated)..[position] = value;
+      expect(
+        () => web.decompressIpcBuffer(0, invalid, 5000),
+        throwsFormatException,
+      );
+    }
+    final externalDictionary = Uint8List.fromList(repeated)..[4] = 0x61;
+    expect(
+      () => web.decompressIpcBuffer(0, externalDictionary, 5000),
+      throwsUnsupportedError,
+    );
+    final oversizedBlock = Uint8List.fromList(repeated);
+    ByteData.sublistView(oversizedBlock).setUint32(7, 65537, Endian.little);
+    expect(
+      () => web.decompressIpcBuffer(0, oversizedBlock, 5000),
+      throwsFormatException,
+    );
+    final invalidDistance = Uint8List.fromList(repeated)
+      ..[13] = 0
+      ..[14] = 0;
+    expect(
+      () => web.decompressIpcBuffer(0, invalidDistance, 5000),
+      throwsFormatException,
+    );
+  });
+  test('optional content size must equal the IPC declared size', () {
+    final size = Uint8List(8);
+    ByteData.sublistView(size).setUint32(0, 5000, Endian.little);
+    final framed = Uint8List.fromList([
+      ...repeated.take(4),
+      repeated[4] | 8,
+      repeated[5],
+      ...size,
+      ...repeated.skip(6),
+    ]);
+    expect(web.decompressIpcBuffer(0, framed, 5000), List.filled(5000, 97));
+    expect(
+      () => web.decompressIpcBuffer(0, framed, 4999),
+      throwsFormatException,
+    );
+  });
   test('web Zstandard is explicitly unsupported', () {
     expect(
       () => web.decompressIpcBuffer(1, repeated, 5000),

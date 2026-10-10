@@ -101,8 +101,14 @@ final class RecordBatchCodec {
     }
     final fields = type['fields'];
     if (fields is List) {
+      final names = <Object?>{};
       for (final raw in fields) {
         final field = raw as Map;
+        if (field['name'] == '' || !names.add(field['name'])) {
+          throw UnsupportedError(
+            'Polars copied structs require unique non-empty field names at $path',
+          );
+        }
         _validateNativeType(
           (field['dtype'] as Map).cast(),
           '$path.${field['name']}',

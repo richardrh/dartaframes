@@ -105,8 +105,8 @@ Uint8List _fixedBuffer(
         bitWidth ~/ 8,
         (v) => (v as ArrowFloatingValue).bits,
       ),
-      ArrowDecimalType(bitWidth: 128) => (
-        16,
+      ArrowDecimalType(:final bitWidth) => (
+        bitWidth ~/ 8,
         (v) => (v as ArrowDecimalValue).unscaled,
       ),
       ArrowDateType(:final unit) => (
