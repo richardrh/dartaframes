@@ -7,6 +7,12 @@ final class RecordBatchCodec {
   static const OwnedBatchJsonCodec _codec = OwnedBatchJsonCodec();
 
   Map<String, Object?> encode(RecordBatch batch) {
+    if (batch.columns.any((column) => column.nestedDictionaries.isNotEmpty)) {
+      throw UnsupportedError(
+        'Nested dictionaries are supported by standalone Arrow IPC, '
+        'not the Polars copied-batch protocol',
+      );
+    }
     final names = <String>{};
     for (final field in batch.schema.fields) {
       if (field.name.isEmpty || !names.add(field.name)) {

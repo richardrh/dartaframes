@@ -2,6 +2,25 @@ import 'package:dartaframes_polars/polars.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('native bridge rejects standalone nested dictionary sidecars', () {
+    final dictionary = ArrowArray(const ArrowUtf8Type(), [
+      const ArrowStringValue('one'),
+    ]);
+    final type = ArrowListType(
+      ArrowField(
+        'item',
+        ArrowDictionaryType(ArrowIntegerType(8), const ArrowUtf8Type()),
+      ),
+    );
+    final array = ArrowArray(type, [], nestedDictionaries: [dictionary]);
+    final batch = RecordBatch(ArrowSchema([ArrowField('value', type)]), [
+      array,
+    ]);
+    expect(
+      () => const RecordBatchCodec().encode(batch),
+      throwsUnsupportedError,
+    );
+  });
   test('standalone Arrow types do not silently broaden native protocol', () {
     final additions = <ArrowDataType>[
       ArrowFixedSizeBinaryType(4),
