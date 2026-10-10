@@ -56,12 +56,42 @@
   },
   {
    "family": "binary",
+   "name": "string_view",
+   "formats": [
+    "file",
+    "stream"
+   ],
+   "expectation": "binary/string_view.json",
+   "optional": false
+  },
+  {
+   "family": "binary",
    "name": "binaries",
    "formats": [
     "file",
     "stream"
    ],
    "expectation": "binary/binaries.json",
+   "optional": false
+  },
+  {
+   "family": "binary",
+   "name": "binary_view",
+   "formats": [
+    "file",
+    "stream"
+   ],
+   "expectation": "binary/binary_view.json",
+   "optional": false
+  },
+  {
+   "family": "binary",
+   "name": "fixed_size_binary",
+   "formats": [
+    "file",
+    "stream"
+   ],
+   "expectation": "binary/fixed_size_binary.json",
    "optional": false
   },
   {
@@ -96,12 +126,52 @@
   },
   {
    "family": "decimal",
-   "name": "decimals",
+   "name": "decimal32_9_2",
    "formats": [
     "file",
     "stream"
    ],
-   "expectation": "decimal/decimals.json",
+   "expectation": "decimal/decimal32_9_2.json",
+   "optional": false
+  },
+  {
+   "family": "decimal",
+   "name": "decimal64_18_4",
+   "formats": [
+    "file",
+    "stream"
+   ],
+   "expectation": "decimal/decimal64_18_4.json",
+   "optional": false
+  },
+  {
+   "family": "decimal",
+   "name": "decimal128_38_10",
+   "formats": [
+    "file",
+    "stream"
+   ],
+   "expectation": "decimal/decimal128_38_10.json",
+   "optional": false
+  },
+  {
+   "family": "decimal",
+   "name": "decimal128_5_0",
+   "formats": [
+    "file",
+    "stream"
+   ],
+   "expectation": "decimal/decimal128_5_0.json",
+   "optional": false
+  },
+  {
+   "family": "decimal",
+   "name": "decimal256_76_20",
+   "formats": [
+    "file",
+    "stream"
+   ],
+   "expectation": "decimal/decimal256_76_20.json",
    "optional": false
   },
   {
@@ -224,22 +294,52 @@
   },
   {
    "family": "union",
-   "name": "unions",
+   "name": "sparse",
    "formats": [
     "file",
     "stream"
    ],
-   "expectation": "union/unions.json",
+   "expectation": "union/sparse.json",
+   "optional": false
+  },
+  {
+   "family": "union",
+   "name": "dense",
+   "formats": [
+    "file",
+    "stream"
+   ],
+   "expectation": "union/dense.json",
    "optional": false
   },
   {
    "family": "ree",
-   "name": "run_end_encoded",
+   "name": "ree16_i32",
    "formats": [
     "file",
     "stream"
    ],
-   "expectation": "ree/run_end_encoded.json",
+   "expectation": "ree/ree16_i32.json",
+   "optional": false
+  },
+  {
+   "family": "ree",
+   "name": "ree32_utf8",
+   "formats": [
+    "file",
+    "stream"
+   ],
+   "expectation": "ree/ree32_utf8.json",
+   "optional": false
+  },
+  {
+   "family": "ree",
+   "name": "ree64_f64",
+   "formats": [
+    "file",
+    "stream"
+   ],
+   "expectation": "ree/ree64_f64.json",
    "optional": false
   },
   {
@@ -250,6 +350,26 @@
     "stream"
    ],
    "expectation": "extension/extensions.json",
+   "optional": false
+  },
+  {
+   "family": "extension",
+   "name": "uuid",
+   "formats": [
+    "file",
+    "stream"
+   ],
+   "expectation": "extension/uuid.json",
+   "optional": false
+  },
+  {
+   "family": "extension",
+   "name": "binary_metadata",
+   "formats": [
+    "file",
+    "stream"
+   ],
+   "expectation": "extension/binary_metadata.json",
    "optional": false
   },
   {

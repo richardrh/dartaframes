@@ -1,7 +1,7 @@
 {
  "family": "extension",
  "name": "extensions",
- "description": "canonical and custom extension metadata (incl. non-UTF-8 bytes)",
+ "description": "canonical (json/bool8) and custom extension metadata",
  "files": {
   "file": "extensions.arrow",
   "stream": "extensions.arrows"
@@ -10,18 +10,6 @@
  "optional": false,
  "schema": {
   "fields": [
-   {
-    "name": "uuid",
-    "nullable": true,
-    "type": {
-     "id": "fixed_size_binary",
-     "byte_width": 16
-    },
-    "metadata": {
-     "ARROW:extension:metadata": "",
-     "ARROW:extension:name": "arrow.uuid"
-    }
-   },
    {
     "name": "json",
     "nullable": true,
@@ -51,7 +39,7 @@
      "id": "int32"
     },
     "metadata": {
-     "ARROW:extension:metadata": "hex:7b22756e6974223a226d222c2262696e223a00ff7d",
+     "ARROW:extension:metadata": "{\"unit\":\"m\"}",
      "ARROW:extension:name": "dartaframes.test.custom"
     }
    }
@@ -62,15 +50,6 @@
   3
  ],
  "columns": [
-  {
-   "name": "uuid",
-   "null_count": 1,
-   "values": [
-    "000102030405060708090a0b0c0d0e0f",
-    null,
-    "ffffffffffffffffffffffffffffffff"
-   ]
-  },
   {
    "name": "json",
    "null_count": 1,

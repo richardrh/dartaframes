@@ -508,23 +508,38 @@ def binary_fixtures() -> list[Fixture]:
         _one(
             "binary",
             "strings",
-            "utf8/large_utf8/utf8_view with Unicode, empty, embedded NUL and null",
+            "utf8/large_utf8 with Unicode, empty, embedded NUL and null",
             {
                 "utf8": pa.array(texts, pa.string()),
                 "large_utf8": pa.array(texts, pa.large_string()),
-                "utf8_view": pa.array(texts, pa.string_view()),
             },
         ),
         _one(
             "binary",
+            "string_view",
+            "utf8_view with inline (<=12 bytes) and out-of-line strings",
+            {"utf8_view": pa.array(texts, pa.string_view())},
+        ),
+        _one(
+            "binary",
             "binaries",
-            "binary/large_binary/binary_view/fixed_size_binary",
+            "binary/large_binary",
             {
                 "binary": pa.array(blobs, pa.binary()),
                 "large_binary": pa.array(blobs, pa.large_binary()),
-                "binary_view": pa.array(blobs, pa.binary_view()),
-                "fsb3": pa.array([b"abc", None, b"\x00\x00\x00", b"\xff\xfe\xfd", b"xyz", b"123"], pa.binary(3)),
             },
+        ),
+        _one(
+            "binary",
+            "binary_view",
+            "binary_view with inline and out-of-line values",
+            {"binary_view": pa.array(blobs, pa.binary_view())},
+        ),
+        _one(
+            "binary",
+            "fixed_size_binary",
+            "fixed_size_binary(3) with null",
+            {"fsb3": pa.array([b"abc", None, b"\x00\x00\x00", b"\xff\xfe\xfd", b"xyz", b"123"], pa.binary(3))},
         ),
         _one(
             "binary",
@@ -594,7 +609,10 @@ def decimal_fixtures() -> list[Fixture]:
         "d128_5_0": dec(["99999", "-99999", "0", None, "1", "-1"], pa.decimal128(5, 0)),
         "d256_76_20": dec([full(76, 20), "-" + full(76, 20), "0", None, "3.14159265358979323846", "-1"], pa.decimal256(76, 20)),
     }
-    out = [_one("decimal", "decimals", "decimal32/64/128/256 precision extrema, zero, null", cols)]
+    out = [
+        _one("decimal", f"{key.split('_')[0].replace('d', 'decimal')}_{key.split('_', 1)[1]}", f"{arr.type} precision extrema, zero, null", {key: arr})
+        for key, arr in cols.items()
+    ]
     out.append(
         _one(
             "decimal",
@@ -765,43 +783,56 @@ def union_fixtures() -> list[Fixture]:
         [pa.array([1.5, None], pa.float64()), pa.array(["x", "y"]), pa.array([True], pa.bool_())],
         ["f", "s", "b"],
     )
-    return [_one("union", "unions", "sparse (custom type codes) and dense unions", {"sparse": sparse, "dense": dense})]
+    return [
+        _one("union", "sparse", "sparse union with custom type codes [5, 7]", {"sparse": sparse}),
+        _one("union", "dense", "dense union with default type codes", {"dense": dense}),
+    ]
 
 
 def ree_fixtures() -> list[Fixture]:
+    cols = {
+        "ree16_i32": pa.RunEndEncodedArray.from_arrays(pa.array([2, 3, 6], pa.int16()), pa.array([7, None, -1], pa.int32())),
+        "ree32_utf8": pa.RunEndEncodedArray.from_arrays(pa.array([1, 4, 6], pa.int32()), pa.array(["a", None, "日本"])),
+        "ree64_f64": pa.RunEndEncodedArray.from_arrays(pa.array([6], pa.int64()), pa.array([0.25], pa.float64())),
+    }
     return [
-        _one(
-            "ree",
-            "run_end_encoded",
-            "run-end encoded with int16/int32/int64 run ends and null runs",
-            {
-                "ree16_i32": pa.RunEndEncodedArray.from_arrays(pa.array([2, 3, 6], pa.int16()), pa.array([7, None, -1], pa.int32())),
-                "ree32_utf8": pa.RunEndEncodedArray.from_arrays(pa.array([1, 4, 6], pa.int32()), pa.array(["a", None, "日本"])),
-                "ree64_f64": pa.RunEndEncodedArray.from_arrays(pa.array([6], pa.int64()), pa.array([0.25], pa.float64())),
-            },
-        )
+        _one("ree", key, f"run-end encoded {arr.type} with null runs", {key: arr})
+        for key, arr in cols.items()
     ]
 
 
 def extension_fixtures() -> list[Fixture]:
     schema = pa.schema(
         [
-            _ext_field("uuid", pa.binary(16), "arrow.uuid"),
             _ext_field("json", pa.string(), "arrow.json"),
             _ext_field("bool8", pa.int8(), "arrow.bool8"),
-            _ext_field("custom", pa.int32(), "dartaframes.test.custom", b'{"unit":"m","bin":\x00\xff}'),
+            _ext_field("custom", pa.int32(), "dartaframes.test.custom", b'{"unit":"m"}'),
         ]
     )
     batch = pa.record_batch(
         [
-            pa.array([bytes(range(16)), None, b"\xff" * 16], pa.binary(16)),
             pa.array(['{"a":1}', "[]", None]),
             pa.array([1, 0, None], pa.int8()),
             pa.array([1, None, -1], pa.int32()),
         ],
         schema=schema,
     )
-    return [Fixture("extension", "extensions", "canonical and custom extension metadata (incl. non-UTF-8 bytes)", schema, [batch])]
+    raw_schema = pa.schema([_ext_field("raw", pa.int32(), "dartaframes.test.raw", b"\x00\xff\xfe binary")])
+    raw = pa.record_batch([pa.array([1, None], pa.int32())], schema=raw_schema)
+    uuid_schema = pa.schema([_ext_field("uuid", pa.binary(16), "arrow.uuid")])
+    uuid = pa.record_batch([pa.array([bytes(range(16)), None, b"\xff" * 16], pa.binary(16))], schema=uuid_schema)
+    return [
+        Fixture("extension", "extensions", "canonical (json/bool8) and custom extension metadata", schema, [batch]),
+        Fixture("extension", "uuid", "arrow.uuid over fixed_size_binary(16)", uuid_schema, [uuid]),
+        Fixture(
+            "extension",
+            "binary_metadata",
+            "extension metadata value that is not valid UTF-8",
+            raw_schema,
+            [raw],
+            notes="Arrow metadata values are bytes; expectation renders them as hex:<bytes>",
+        ),
+    ]
 
 
 def metadata_fixtures() -> list[Fixture]:

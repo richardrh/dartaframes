@@ -1,42 +1,15 @@
 {
  "family": "union",
- "name": "unions",
- "description": "sparse (custom type codes) and dense unions",
+ "name": "dense",
+ "description": "dense union with default type codes",
  "files": {
-  "file": "unions.arrow",
-  "stream": "unions.arrows"
+  "file": "dense.arrow",
+  "stream": "dense.arrows"
  },
  "write_options": {},
  "optional": false,
  "schema": {
   "fields": [
-   {
-    "name": "sparse",
-    "nullable": true,
-    "type": {
-     "id": "sparse_union",
-     "type_codes": [
-      5,
-      7
-     ],
-     "children": [
-      {
-       "name": "i",
-       "nullable": true,
-       "type": {
-        "id": "int64"
-       }
-      },
-      {
-       "name": "s",
-       "nullable": true,
-       "type": {
-        "id": "utf8"
-       }
-      }
-     ]
-    }
-   },
    {
     "name": "dense",
     "nullable": true,
@@ -79,32 +52,6 @@
   5
  ],
  "columns": [
-  {
-   "name": "sparse",
-   "null_count": 0,
-   "values": [
-    {
-     "type_code": 5,
-     "value": "1"
-    },
-    {
-     "type_code": 7,
-     "value": "b"
-    },
-    {
-     "type_code": 5,
-     "value": null
-    },
-    {
-     "type_code": 7,
-     "value": null
-    },
-    {
-     "type_code": 5,
-     "value": "5"
-    }
-   ]
-  },
   {
    "name": "dense",
    "null_count": 0,

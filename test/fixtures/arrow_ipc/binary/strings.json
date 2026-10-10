@@ -1,7 +1,7 @@
 {
  "family": "binary",
  "name": "strings",
- "description": "utf8/large_utf8/utf8_view with Unicode, empty, embedded NUL and null",
+ "description": "utf8/large_utf8 with Unicode, empty, embedded NUL and null",
  "files": {
   "file": "strings.arrow",
   "stream": "strings.arrows"
@@ -22,13 +22,6 @@
     "nullable": true,
     "type": {
      "id": "large_utf8"
-    }
-   },
-   {
-    "name": "utf8_view",
-    "nullable": true,
-    "type": {
-     "id": "utf8_view"
     }
    }
   ]
@@ -55,21 +48,6 @@
   },
   {
    "name": "large_utf8",
-   "null_count": 1,
-   "values": [
-    "",
-    "ascii",
-    null,
-    "héllo wörld",
-    "日本語テキスト",
-    "emoji 😀👍🏽",
-    "é combining",
-    "nul\u0000inside",
-    "a much longer string beyond twelve bytes"
-   ]
-  },
-  {
-   "name": "utf8_view",
    "null_count": 1,
    "values": [
     "",

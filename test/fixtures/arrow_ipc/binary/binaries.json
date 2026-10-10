@@ -1,7 +1,7 @@
 {
  "family": "binary",
  "name": "binaries",
- "description": "binary/large_binary/binary_view/fixed_size_binary",
+ "description": "binary/large_binary",
  "files": {
   "file": "binaries.arrow",
   "stream": "binaries.arrows"
@@ -22,21 +22,6 @@
     "nullable": true,
     "type": {
      "id": "large_binary"
-    }
-   },
-   {
-    "name": "binary_view",
-    "nullable": true,
-    "type": {
-     "id": "binary_view"
-    }
-   },
-   {
-    "name": "fsb3",
-    "nullable": true,
-    "type": {
-     "id": "fixed_size_binary",
-     "byte_width": 3
     }
    }
   ]
@@ -68,30 +53,6 @@
     "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
     "73686f7274",
     "3031323334353637383961626364656658595a"
-   ]
-  },
-  {
-   "name": "binary_view",
-   "null_count": 1,
-   "values": [
-    "",
-    "0001ff",
-    null,
-    "000102030405060708090a0b0c0d0e0f101112131415161718191a1b1c1d1e1f",
-    "73686f7274",
-    "3031323334353637383961626364656658595a"
-   ]
-  },
-  {
-   "name": "fsb3",
-   "null_count": 1,
-   "values": [
-    "616263",
-    null,
-    "000000",
-    "fffefd",
-    "78797a",
-    "313233"
    ]
   }
  ]
