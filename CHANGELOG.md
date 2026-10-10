@@ -2,6 +2,16 @@
 
 ## Unreleased
 
+- Add standard Apache Arrow IPC (metadata V5) stream and file readers and
+  writers for the owned logical Arrow model, verified against PyArrow 26.0.0
+  fixtures in both directions. See `doc/content/docs/arrow-ipc.md` and
+  `example/arrow_ipc.dart`.
+- IPC readers decode LZ4_FRAME and ZSTD compressed bodies on the Dart VM and
+  LZ4_FRAME on the web. Writers emit uncompressed bodies. Readers are bounded
+  by `ArrowIpcLimits` and are little-endian only.
+- Add the pure Dart `libcompress` runtime dependency for IPC decompression.
+- `int128`/`uint128` binding extensions are rejected by the IPC writers since
+  they have no standard Arrow encoding.
 - Enable Dart core lints in local analysis and CI, and add explicit control-flow
   braces without changing runtime behavior.
 - Expand public API documentation for errors, runtime entry points, and data

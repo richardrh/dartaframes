@@ -5,7 +5,9 @@
 /// https://arrow.apache.org/docs/format/Columnar.html#serialization-and-interprocess-communication-ipc
 /// with metadata from `Schema.fbs`, `Message.fbs` and `File.fbs`. The
 /// FlatBuffers metadata is produced and parsed by a small in-tree
-/// implementation, so no runtime dependency is required.
+/// implementation. Compressed bodies are decoded with the pure Dart
+/// `libcompress` package on the VM (LZ4_FRAME and ZSTD) and with an in-tree
+/// LZ4 frame decoder on the web (ZSTD is unsupported there).
 ///
 /// Scope and deliberate limits:
 /// * Little-endian only. Big-endian producers are rejected.
