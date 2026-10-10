@@ -7,7 +7,13 @@ final class RecordBatchCodec {
   static const OwnedBatchJsonCodec _codec = OwnedBatchJsonCodec();
 
   Map<String, Object?> encode(RecordBatch batch) {
+    final names = <String>{};
     for (final field in batch.schema.fields) {
+      if (field.name.isEmpty || !names.add(field.name)) {
+        throw UnsupportedError(
+          'Polars copied batches require unique non-empty column names',
+        );
+      }
       _validateNativeType(field.type.toJson(), field.name);
     }
     final encoded = _codec.toJson(batch);

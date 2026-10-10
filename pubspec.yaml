@@ -16,6 +16,7 @@ platforms:
 environment:
   sdk: ^3.13.0
 dependencies:
+  libcompress: ^1.2.1
   code_assets: ">=1.2.1 <3.0.0"
   crypto: ^3.0.6
   ffi: ^2.1.4

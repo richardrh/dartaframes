@@ -33,6 +33,25 @@ void main() {
     }
   });
 
+  test('native bridge rejects unnamed and duplicate standard columns', () {
+    for (final names in [
+      <String>[''],
+      <String>['x', 'x'],
+    ]) {
+      final batch = RecordBatch(
+        ArrowSchema([
+          for (final name in names)
+            ArrowField(name, const ArrowUtf8Type(), allowEmptyName: true),
+        ], allowDuplicateNames: true),
+        [for (final _ in names) ArrowArray(const ArrowUtf8Type(), [])],
+      );
+      expect(
+        () => const RecordBatchCodec().encode(batch),
+        throwsUnsupportedError,
+      );
+    }
+  });
+
   test('legacy decimal copied-batch shape remains unchanged', () {
     final type = ArrowDecimalType(10, 2);
     final batch = RecordBatch(ArrowSchema([ArrowField('price', type)]), [
