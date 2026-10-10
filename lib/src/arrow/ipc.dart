@@ -13,9 +13,9 @@
 /// * Little-endian only. Big-endian producers are rejected.
 /// * Compressed bodies (LZ4_FRAME/ZSTD) are read when the platform helper
 ///   supports the codec; writers always emit uncompressed bodies.
-/// * Dictionary-encoded fields are supported at the top level of a schema
-///   (the logical model attaches one dictionary per [ArrowArray]). Nested
-///   dictionaries are rejected explicitly.
+/// * Dictionary-encoded fields may be nested in lists, structs and other
+///   child-bearing types, including extension-wrapped dictionaries. Sidecars
+///   preserve dictionary values and stream replacement snapshots.
 /// * `int128`/`uint128` are DartAframes binding extensions with no standard
 ///   encoding and are rejected rather than mis-encoded.
 /// * Readers are bounded by [ArrowIpcLimits]; malformed input raises
@@ -37,6 +37,7 @@ import 'value.dart';
 part 'ipc_body.dart';
 part 'ipc_body_extended.dart';
 part 'ipc_compression.dart';
+part 'ipc_dictionary.dart';
 part 'ipc_flatbuffers.dart';
 part 'ipc_message.dart';
 part 'ipc_schema.dart';
@@ -102,7 +103,7 @@ final class ArrowTable {
   int get rowCount => batches.fold(0, (sum, b) => sum + b.rowCount);
 }
 
-/// Decoded schema plus dictionary ids of top-level dictionary fields in
+/// Decoded schema plus dictionary ids of dictionary fields in
 /// depth-first pre-order, as produced by `_decodeSchema`.
 final class _IpcSchema {
   const _IpcSchema(this.schema, this.dictionaryIds);
@@ -140,16 +141,36 @@ final class ArrowIpcFileReader {
 
   ArrowTable readTable() => _guard(() {
     final footer = _readFooter(bytes);
+    final footerLength = ByteData.sublistView(bytes)
+        .getInt32(bytes.length - 10, Endian.little);
+    if (footerLength > limits.maxMessageBytes) {
+      throw const FormatException('IPC footer exceeds maxMessageBytes');
+    }
+    final data = Uint8List.sublistView(
+      bytes,
+      0,
+      bytes.length - 10 - footerLength,
+    );
     final schemaTable = footer.table(1);
     if (schemaTable == null) {
       throw const FormatException('IPC file footer has no schema');
     }
     final state = _ReadState(_decodeSchema(schemaTable, limits), limits);
     for (final block in _blocks(footer, 2, limits.maxDictionaries)) {
-      state.accept(_readBlock(bytes, block, limits), allowReplacement: false);
+      final message = _readBlock(data, block, limits);
+      if (message.headerType != _headerDictionaryBatch) {
+        throw const FormatException('Dictionary block has wrong message type');
+      }
+      state.accept(message, allowReplacement: false);
     }
     for (final block in _blocks(footer, 3, limits.maxBatches)) {
-      state.accept(_readBlock(bytes, block, limits), allowReplacement: false);
+      final message = _readBlock(data, block, limits);
+      if (message.headerType != _headerRecordBatch) {
+        throw const FormatException(
+          'Record batch block has wrong message type',
+        );
+      }
+      state.accept(message, allowReplacement: false);
     }
     return state.table();
   });

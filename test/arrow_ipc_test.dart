@@ -9,6 +9,62 @@ ArrowArray _col(ArrowDataType type, List<ArrowValue?> values) =>
 ArrowIntegerValue _i(int v) => ArrowIntegerValue(v);
 ArrowTemporalValue _t(int v) => ArrowTemporalValue(v);
 
+// Minimal metadata addressing for mutations of public-writer output.
+int _slot(ByteData data, int table, int field) {
+  final vt = table - data.getInt32(table, Endian.little);
+  final entry = vt + 4 + field * 2;
+  if (entry >= vt + data.getUint16(vt, Endian.little)) return 0;
+  final offset = data.getUint16(entry, Endian.little);
+  return offset == 0 ? 0 : table + offset;
+}
+
+int _ref(ByteData data, int at) => at + data.getUint32(at, Endian.little);
+
+List<({int start, int end, int header, int kind})> _messages(Uint8List bytes) {
+  final data = ByteData.sublistView(bytes);
+  final result = <({int start, int end, int header, int kind})>[];
+  var start = 0;
+  while (start < bytes.length - 8) {
+    final length = data.getInt32(start + 4, Endian.little);
+    if (length == 0) break;
+    final message = _ref(data, start + 8);
+    final bodySlot = _slot(data, message, 3);
+    final bodyLength = bodySlot == 0
+        ? 0
+        : data.getInt64(bodySlot, Endian.little);
+    final end = start + 8 + length + bodyLength;
+    result.add((
+      start: start,
+      end: end,
+      header: _ref(data, _slot(data, message, 2)),
+      kind: data.getUint8(_slot(data, message, 1)),
+    ));
+    start = end;
+  }
+  return result;
+}
+
+List<int> _schemaDictionaryIdSlots(Uint8List bytes) {
+  final data = ByteData.sublistView(bytes);
+  final result = <int>[];
+  void fields(int vectorSlot) {
+    if (vectorSlot == 0) return;
+    final vector = _ref(data, vectorSlot);
+    final length = data.getUint32(vector, Endian.little);
+    for (var i = 0; i < length; i++) {
+      final field = _ref(data, vector + 4 + i * 4);
+      final dictionary = _slot(data, field, 4);
+      if (dictionary != 0) {
+        result.add(_slot(data, _ref(data, dictionary), 0));
+      }
+      fields(_slot(data, field, 5));
+    }
+  }
+
+  fields(_slot(data, _messages(bytes).first.header, 1));
+  return result;
+}
+
 (ArrowSchema, List<RecordBatch>) _sample() {
   final listType = ArrowListType(ArrowField('item', ArrowIntegerType(32)));
   final largeList = ArrowListType(
@@ -218,6 +274,323 @@ int _indexOf(Uint8List haystack, Uint8List needle) {
 }
 
 void main() {
+  group('Arrow IPC dictionary protocol', () {
+    final dict = ArrowDictionaryType(
+      ArrowIntegerType(8),
+      const ArrowUtf8Type(),
+    );
+    ArrowArray words(String word) =>
+        _col(const ArrowUtf8Type(), [ArrowStringValue(word)]);
+    final ext = ArrowExtensionType('example.dictionary', dict, metadata: 'v1');
+
+    test('append-only dictionaries emit deltas with bounded merged size', () {
+      final schema = ArrowSchema([ArrowField('d', dict)]);
+      RecordBatch batch(List<String> values) => RecordBatch(schema, [
+        ArrowArray(
+          dict,
+          [ArrowDictionaryIndexValue(values.length - 1)],
+          dictionary: _col(
+            const ArrowUtf8Type(),
+            values.map(ArrowStringValue.new).toList(),
+          ),
+        ),
+      ]);
+      final batches = [
+        batch(['a']),
+        batch(['a', 'b']),
+      ];
+      final bytes = ArrowIpcStreamWriter(
+        schema: schema,
+        batches: batches,
+      ).write();
+      final data = ByteData.sublistView(bytes);
+      final dictionaryMessages = _messages(bytes)
+          .where((m) => m.kind == 2)
+          .toList();
+      expect(dictionaryMessages.length, 2);
+      expect(bytes[_slot(data, dictionaryMessages.last.header, 2)], 1);
+      final table = ArrowIpcStreamReader(bytes).readTable();
+      expect(table.batches.first.columns.single.dictionary!.length, 1);
+      expect(table.batches.last.columns.single.dictionary!.length, 2);
+      expect(
+        () => ArrowIpcStreamReader(
+          bytes,
+          limits: const ArrowIpcLimits(maxRows: 1),
+        ).readTable(),
+        throwsFormatException,
+      );
+      final file = ArrowIpcFileWriter(schema: schema, batches: batches).write();
+      expect(
+        ArrowIpcFileReader(file)
+            .readTable()
+            .batches
+            .last
+            .columns
+            .single
+            .dictionary!
+            .values,
+        batches.last.columns.single.dictionary!.values,
+      );
+    });
+
+    test('out-of-range dictionary indices are rejected by public reader', () {
+      final schema = ArrowSchema([ArrowField('d', dict)]);
+      final bytes = ArrowIpcStreamWriter(
+        schema: schema,
+        batches: [
+          RecordBatch(schema, [
+            ArrowArray(dict, [
+              ArrowDictionaryIndexValue(0),
+            ], dictionary: words('red')),
+          ]),
+        ],
+      ).write();
+      final data = ByteData.sublistView(bytes);
+      final batch = _messages(bytes).last;
+      final buffers = _ref(data, _slot(data, batch.header, 2));
+      final indicesOffset = data.getInt64(buffers + 4 + 16, Endian.little);
+      final body =
+          batch.start + 8 + data.getInt32(batch.start + 4, Endian.little);
+      bytes[body + indicesOffset] = 127;
+      expect(
+        () => ArrowIpcStreamReader(bytes).readTable(),
+        throwsFormatException,
+      );
+    });
+
+    test('extension dictionary root and struct child preserve sidecars', () {
+      final struct = ArrowStructType([ArrowField('child', ext)]);
+      final dictionary = words('red');
+      final index = ArrowExtensionValue(ArrowDictionaryIndexValue(0));
+      final columns = [
+        ArrowArray(ext, [index, null], dictionary: dictionary),
+        ArrowArray(
+          struct,
+          [
+            ArrowStructValue([ArrowStructEntry('child', index)]),
+            null,
+          ],
+          nestedDictionaries: [dictionary],
+        ),
+      ];
+      final schema = ArrowSchema([
+        ArrowField('root', ext),
+        ArrowField('nested', struct),
+      ]);
+      final batches = [RecordBatch(schema, columns)];
+      for (final table in [
+        ArrowIpcStreamReader(
+          ArrowIpcStreamWriter(schema: schema, batches: batches).write(),
+        ).readTable(),
+        ArrowIpcFileReader(
+          ArrowIpcFileWriter(schema: schema, batches: batches).write(),
+        ).readTable(),
+      ]) {
+        expect(table.schema, schema);
+        final actual = table.batches.single.columns;
+        expect(actual[0].values, columns[0].values);
+        expect(actual[1].values, columns[1].values);
+        expect(actual[0].dictionary!.values, dictionary.values);
+        expect(actual[1].nestedDictionaries.single.values, dictionary.values);
+      }
+    });
+
+    test(
+      'dictionary of list dictionary follows inner replacement snapshots',
+      () {
+        final list = ArrowListType(ArrowField('item', dict));
+        final outer = ArrowDictionaryType(ArrowIntegerType(16), list);
+        final schema = ArrowSchema([ArrowField('outer', outer)]);
+        RecordBatch batch(String word) {
+          final inner = words(word);
+          final values = ArrowArray(
+            list,
+            [
+              ArrowListValue([ArrowDictionaryIndexValue(0)]),
+            ],
+            nestedDictionaries: [inner],
+          );
+          return RecordBatch(schema, [
+            ArrowArray(
+              outer,
+              [ArrowDictionaryIndexValue(0)],
+              dictionary: values,
+              nestedDictionaries: [inner],
+            ),
+          ]);
+        }
+
+        final input = [batch('old'), batch('new')];
+        final bytes = ArrowIpcStreamWriter(
+          schema: schema,
+          batches: input,
+        ).write();
+        final table = ArrowIpcStreamReader(bytes).readTable();
+        for (var i = 0; i < 2; i++) {
+          final column = table.batches[i].columns.single;
+          expect(
+            column.dictionary!.nestedDictionaries.single.values,
+            input[i].columns.single.nestedDictionaries.single.values,
+          );
+          expect(
+            column.nestedDictionaries.single.values,
+            input[i].columns.single.nestedDictionaries.single.values,
+          );
+        }
+        final file = ArrowIpcFileWriter(
+          schema: schema,
+          batches: [input.first],
+        ).write();
+        expect(
+          ArrowIpcFileReader(file)
+              .readTable()
+              .batches
+              .single
+              .columns
+              .single
+              .dictionary!
+              .nestedDictionaries
+              .single
+              .values,
+          words('old').values,
+        );
+      },
+    );
+
+    Uint8List twoFields({bool incompatible = false}) {
+      final second = incompatible
+          ? ArrowDictionaryType(ArrowIntegerType(16), ArrowIntegerType(32))
+          : ArrowDictionaryType(ArrowIntegerType(16), const ArrowUtf8Type());
+      final schema = ArrowSchema([
+        ArrowField('a', dict),
+        ArrowField('b', second),
+      ]);
+      return ArrowIpcStreamWriter(
+        schema: schema,
+        batches: [
+          RecordBatch(schema, [
+            ArrowArray(dict, [
+              ArrowDictionaryIndexValue(0),
+            ], dictionary: words('red')),
+            ArrowArray(
+              second,
+              [ArrowDictionaryIndexValue(0)],
+              dictionary: incompatible
+                  ? _col(ArrowIntegerType(32), [_i(9)])
+                  : words('red'),
+            ),
+          ]),
+        ],
+      ).write();
+    }
+
+    test('compatible fields share a negative dictionary wire id', () {
+      final bytes = twoFields();
+      final data = ByteData.sublistView(bytes);
+      for (final at in _schemaDictionaryIdSlots(bytes)) {
+        data.setInt64(at, -7, Endian.little);
+      }
+      final messages = _messages(bytes);
+      final dictionaries = messages.where((m) => m.kind == 2).toList();
+      data.setInt64(
+        _slot(data, dictionaries.first.header, 0),
+        -7,
+        Endian.little,
+      );
+      final dropped = dictionaries.last;
+      final shared = Uint8List.fromList([
+        ...bytes.sublist(0, dropped.start),
+        ...bytes.sublist(dropped.end),
+      ]);
+      final columns = ArrowIpcStreamReader(shared)
+          .readTable()
+          .batches
+          .single
+          .columns;
+      expect(columns[0].dictionary!.values, words('red').values);
+      expect(columns[1].dictionary!.values, words('red').values);
+    });
+
+    test('incompatible shared dictionary types rejected', () {
+      final bytes = twoFields(incompatible: true);
+      final data = ByteData.sublistView(bytes);
+      for (final at in _schemaDictionaryIdSlots(bytes)) {
+        data.setInt64(at, -1, Endian.little);
+      }
+      expect(
+        () => ArrowIpcStreamReader(bytes).readTable(),
+        throwsFormatException,
+      );
+    });
+
+    test('unknown ids, missing dictionaries and base-less deltas rejected', () {
+      final original = twoFields();
+      final dictionaries = _messages(original)
+          .where((m) => m.kind == 2)
+          .toList();
+      final first = dictionaries.first;
+      final unknown = Uint8List.fromList(original);
+      final data = ByteData.sublistView(unknown);
+      data.setInt64(_slot(data, first.header, 0), 999, Endian.little);
+      expect(
+        () => ArrowIpcStreamReader(unknown).readTable(),
+        throwsFormatException,
+      );
+      final delta = Uint8List.fromList(original);
+      delta[_slot(ByteData.sublistView(delta), first.header, 2)] = 1;
+      expect(
+        () => ArrowIpcStreamReader(delta).readTable(),
+        throwsFormatException,
+      );
+      final missing = Uint8List.fromList([
+        ...original.sublist(0, first.start),
+        ...original.sublist(first.end),
+      ]);
+      expect(
+        () => ArrowIpcStreamReader(missing).readTable(),
+        throwsFormatException,
+      );
+    });
+
+    test('dictionary count, value and body limits are enforced', () {
+      final bytes = twoFields();
+      for (final limits in [
+        const ArrowIpcLimits(maxDictionaries: 1),
+        const ArrowIpcLimits(maxValues: 1),
+        const ArrowIpcLimits(maxMessageBytes: 1),
+      ]) {
+        expect(
+          () => ArrowIpcStreamReader(bytes, limits: limits).readTable(),
+          throwsFormatException,
+        );
+      }
+      final schema = ArrowSchema([ArrowField('large', const ArrowUtf8Type())]);
+      final batches = [
+        RecordBatch(schema, [
+          _col(const ArrowUtf8Type(), [ArrowStringValue('x' * 4096)]),
+        ]),
+      ];
+      final large = ArrowIpcStreamWriter(
+        schema: schema,
+        batches: batches,
+      ).write();
+      expect(
+        () => ArrowIpcStreamReader(
+          large,
+          limits: const ArrowIpcLimits(maxMessageBytes: 1024),
+        ).readTable(),
+        throwsFormatException,
+      );
+      final file = ArrowIpcFileWriter(schema: schema, batches: batches).write();
+      expect(
+        () => ArrowIpcFileReader(
+          file,
+          limits: const ArrowIpcLimits(maxMessageBytes: 1024),
+        ).readTable(),
+        throwsFormatException,
+      );
+    });
+  });
   group('Arrow IPC round trip', () {
     test('stream preserves all core types', () {
       final (schema, batches) = _sample();
@@ -301,17 +674,48 @@ void main() {
       }
     });
 
-    test('nested dictionaries on write', () {
+    test('nested dictionaries roundtrip through file and stream', () {
       final dict = ArrowDictionaryType(
         ArrowIntegerType(8),
         const ArrowUtf8Type(),
       );
       final type = ArrowListType(ArrowField('item', dict));
       final schema = ArrowSchema([ArrowField('x', type)]);
-      expect(
-        () => ArrowIpcStreamWriter(schema: schema, batches: const []).write(),
-        throwsUnsupportedError,
+      final dictionary = _col(const ArrowUtf8Type(), [
+        const ArrowStringValue('red'),
+        const ArrowStringValue('blue'),
+      ]);
+      final column = ArrowArray(
+        type,
+        [
+          ArrowListValue([
+            ArrowDictionaryIndexValue(1),
+            null,
+            ArrowDictionaryIndexValue(0),
+          ]),
+          null,
+          ArrowListValue([]),
+        ],
+        nestedDictionaries: [dictionary],
       );
+      final batches = [
+        RecordBatch(schema, [column]),
+      ];
+      for (final table in [
+        ArrowIpcStreamReader(
+          ArrowIpcStreamWriter(schema: schema, batches: batches).write(),
+        ).readTable(),
+        ArrowIpcFileReader(
+          ArrowIpcFileWriter(schema: schema, batches: batches).write(),
+        ).readTable(),
+      ]) {
+        expect(table.schema, schema);
+        expect(table.batches.single.columns.single.values, column.values);
+        expect(
+          table.batches.single.columns.single.nestedDictionaries.single.values,
+          dictionary.values,
+        );
+      }
     });
 
     test('ArrowTable with mismatched batch schema', () {
@@ -365,7 +769,7 @@ void main() {
     });
 
     test('every truncation of a file fails cleanly', () {
-      for (var n = 0; n < file.length; n += 11) {
+      for (var n = 0; n < file.length; n++) {
         final cut = Uint8List.sublistView(file, 0, n);
         expect(
           () => ArrowIpcFileReader(cut).readTable(),
@@ -373,6 +777,41 @@ void main() {
           reason: 'length $n',
         );
       }
+    });
+
+    test('file block lengths and footer boundaries cannot be forged', () {
+      final data = ByteData.sublistView(file);
+      final footerStart =
+          file.length - 10 - data.getInt32(file.length - 10, Endian.little);
+      final footer = _ref(data, footerStart);
+      final vector = _ref(data, _slot(data, footer, 3));
+      final block = vector + 4;
+      for (final delta in [-8, 8]) {
+        final copy = Uint8List.fromList(file);
+        final mutable = ByteData.sublistView(copy);
+        mutable.setInt32(
+          block + 8,
+          data.getInt32(block + 8, Endian.little) + delta,
+          Endian.little,
+        );
+        expect(
+          () => ArrowIpcFileReader(copy).readTable(),
+          throwsFormatException,
+        );
+      }
+      final outside = Uint8List.fromList(file);
+      ByteData.sublistView(outside).setInt64(block, footerStart, Endian.little);
+      expect(
+        () => ArrowIpcFileReader(outside).readTable(),
+        throwsFormatException,
+      );
+      final wrongKind = Uint8List.fromList(file);
+      final dictionaryVector = _ref(data, _slot(data, footer, 2));
+      wrongKind.setRange(block, block + 24, file, dictionaryVector + 4);
+      expect(
+        () => ArrowIpcFileReader(wrongKind).readTable(),
+        throwsFormatException,
+      );
     });
 
     test('byte corruption never escapes as an uncaught crash', () {

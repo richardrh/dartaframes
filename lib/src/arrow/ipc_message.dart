@@ -85,6 +85,9 @@ final class _MessageCursor {
       metadata,
       Uint8List.sublistView(bytes, position),
     );
+    if (message.body.length > limits.maxMessageBytes) {
+      throw const FormatException('IPC body exceeds maxMessageBytes');
+    }
     position += message.body.length;
     return message;
   }
@@ -146,6 +149,7 @@ _Message _readBlock(Uint8List bytes, _Block block, ArrowIpcLimits limits) {
   if (block.offset < 8 ||
       block.metadataLength < 8 ||
       block.bodyLength < 0 ||
+      block.bodyLength > limits.maxMessageBytes ||
       end > bytes.length) {
     throw const FormatException('IPC file block lies outside the file');
   }
@@ -156,6 +160,9 @@ _Message _readBlock(Uint8List bytes, _Block block, ArrowIpcLimits limits) {
   );
   final message = cursor.next();
   if (message == null) throw const FormatException('Empty IPC file block');
+  if (cursor.position != end || message.body.length != block.bodyLength) {
+    throw const FormatException('IPC file block lengths disagree with message');
+  }
   return message;
 }
 
@@ -167,27 +174,28 @@ final class _ReadState {
 
   final ArrowSchema schema;
   final ArrowIpcLimits limits;
-  final Map<int, int> _fieldForId = {};
+  late final List<_DictionarySlot> _slots;
+  late final List<int> _ids;
+  final Map<int, _DictionarySlot> _slotForId = {};
   final Map<int, ArrowArray> _dictionaries = {};
   final List<RecordBatch> _batches = [];
   late final _ValueBudget _budget = _ValueBudget(limits.maxValues);
   int _dictionaryCount = 0;
 
   void _bindDictionaryIds(_IpcSchema ipc) {
-    final fields = [
-      for (var i = 0; i < schema.fields.length; i++)
-        if (schema.fields[i].type is ArrowDictionaryType) i,
-    ];
-    if (fields.length != ipc.dictionaryIds.length) {
-      throw UnsupportedError(
-        'Nested dictionary-encoded fields are unsupported',
-      );
+    final slots = _slots = _dictionarySlots(schema);
+    _ids = ipc.dictionaryIds;
+    if (slots.length != ipc.dictionaryIds.length) {
+      throw const FormatException('Schema dictionary ids are inconsistent');
     }
-    for (var k = 0; k < fields.length; k++) {
-      if (_fieldForId.containsKey(ipc.dictionaryIds[k])) {
-        throw const FormatException('Duplicate dictionary id in schema');
+    for (var k = 0; k < slots.length; k++) {
+      final id = ipc.dictionaryIds[k];
+      final previous = _slotForId[id];
+      if (previous != null &&
+          previous.type.valueType != slots[k].type.valueType) {
+        throw FormatException('Incompatible value types for dictionary id $id');
       }
-      _fieldForId[ipc.dictionaryIds[k]] = fields[k];
+      _slotForId.putIfAbsent(id, () => slots[k]);
     }
   }
 
@@ -211,10 +219,9 @@ final class _ReadState {
       throw const FormatException('Too many dictionary batches');
     }
     final id = message.header.i64(0, 0);
-    final field = _fieldForId[id];
-    if (field == null) throw FormatException('Unknown dictionary id $id');
-    final valueType =
-        (schema.fields[field].type as ArrowDictionaryType).valueType;
+    final slot = _slotForId[id];
+    if (slot == null) throw FormatException('Unknown dictionary id $id');
+    final valueType = slot.type.valueType;
     final data = message.header.table(1);
     if (data == null) {
       throw const FormatException('DictionaryBatch has no data');
@@ -227,25 +234,30 @@ final class _ReadState {
       _budget,
     ).single;
     final isDelta = message.header.boolean(2, false);
-    _storeDictionary(id, valueType, values, isDelta, allowReplacement);
-  }
-
-  void _storeDictionary(
-    int id,
-    ArrowDataType type,
-    List<ArrowValue?> values,
-    bool isDelta,
-    bool allowReplacement,
-  ) {
     final existing = _dictionaries[id];
     if (existing != null && !isDelta && !allowReplacement) {
       throw const FormatException('IPC files may not replace dictionaries');
     }
+    if (isDelta && existing == null) {
+      throw FormatException('Dictionary delta $id has no base dictionary');
+    }
+    if ((existing?.length ?? 0) + values.length > limits.maxRows && isDelta) {
+      throw const FormatException('Dictionary delta exceeds row limit');
+    }
     final merged = isDelta && existing != null
         ? [...existing.values, ...values]
         : values;
-    _dictionaries[id] = ArrowArray(type, merged);
+    _dictionaries[id] = _assemble(valueType, merged, _innerIds(slot));
   }
+
+  /// Ids of dictionaries nested inside [slot]'s value type, in preorder.
+  List<int> _innerIds(_DictionarySlot slot) => [
+    for (var k = 0; k < _slots.length; k++)
+      if (_slots[k].column == slot.column &&
+          _slots[k].ordinal > slot.ordinal &&
+          _slots[k].ordinal <= slot.ordinal + slot.innerCount)
+        _ids[k],
+  ];
 
   void _acceptBatch(_Message message) {
     if (_batches.length >= limits.maxBatches) {
@@ -262,20 +274,43 @@ final class _ReadState {
     final rows = message.header.i64(0, 0);
     _batches.add(
       RecordBatch(schema, [
-        for (var i = 0; i < columns.length; i++) _column(i, columns[i]),
+        for (var i = 0; i < columns.length; i++)
+          _assemble(types[i], columns[i], _columnIds(i)),
       ], rowCount: rows),
     );
   }
 
-  ArrowArray _column(int index, List<ArrowValue?> values) {
-    final type = schema.fields[index].type;
-    if (type is! ArrowDictionaryType) return ArrowArray(type, values);
-    final id = _fieldForId.entries.firstWhere((e) => e.value == index).key;
-    final dictionary = _dictionaries[id];
-    if (dictionary == null) {
-      throw FormatException('Record batch references missing dictionary $id');
+  List<int> _columnIds(int column) => [
+    for (var k = 0; k < _slots.length; k++)
+      if (_slots[k].column == column) _ids[k],
+  ];
+
+  /// Builds an array of [type] attaching dictionaries [ids] in preorder.
+  ArrowArray _assemble(
+    ArrowDataType type,
+    List<ArrowValue?> values,
+    List<int> ids,
+  ) {
+    final slots = _columnSlots(0, type);
+    final dictionaries = List<ArrowArray?>.filled(ids.length, null);
+    for (var k = ids.length - 1; k >= 0; k--) {
+      final id = ids[k];
+      final stored = _dictionaries[id];
+      if (stored == null) {
+        throw FormatException('Batch references missing dictionary $id');
+      }
+      final count = slots[k].innerCount;
+      dictionaries[k] = count == 0
+          ? stored
+          : _arrayWithDictionaries(stored.type, stored.values, [
+              for (var j = k + 1; j <= k + count; j++) dictionaries[j]!,
+            ]);
     }
-    return ArrowArray(type, values, dictionary: dictionary);
+    return _arrayWithDictionaries(
+      type,
+      values,
+      dictionaries.cast<ArrowArray>(),
+    );
   }
 
   ArrowTable table() => ArrowTable(schema, _batches);
@@ -398,49 +433,68 @@ final class _MessageSink {
 }) {
   final schema = _encodeSchema(table.schema);
   out.message(_headerSchema, schema, Uint8List(0));
-  final dictionaryFields = [
-    for (var i = 0; i < table.schema.fields.length; i++)
-      if (table.schema.fields[i].type is ArrowDictionaryType) i,
-  ];
-  final total = table.schema.fields.fold(
-    0,
-    (sum, f) => sum + _countDictionaries(f.type),
-  );
-  if (total != dictionaryFields.length) {
-    throw UnsupportedError(
-      'Only top-level dictionary-encoded fields can be written to IPC',
-    );
-  }
   final dictionaryBlocks = <_Block>[];
   final batchBlocks = <_Block>[];
   final written = <int, ArrowArray>{};
   for (final batch in table.batches) {
-    for (var id = 0; id < dictionaryFields.length; id++) {
-      final dictionary = batch.columns[dictionaryFields[id]].dictionary!;
-      final previous = written[id];
-      if (previous != null && _sameValues(previous, dictionary)) continue;
-      if (previous != null && file) {
-        throw UnsupportedError(
-          'IPC files cannot replace a dictionary between batches',
-        );
+    var id = 0;
+    final dictionaries = <(int, ArrowArray)>[];
+    for (final column in batch.columns) {
+      for (final dictionary in _columnDictionaries(column)) {
+        dictionaries.add((id++, dictionary));
       }
-      written[id] = dictionary;
-      dictionaryBlocks.add(_writeDictionary(out, id, dictionary));
+    }
+    // Child dictionaries must precede dictionaries whose values use them.
+    for (final (id, dictionary) in dictionaries.reversed) {
+      final block = _dictionaryDelta(out, id, dictionary, written, file);
+      if (block != null) dictionaryBlocks.add(block);
     }
     batchBlocks.add(_writeBatch(out, batch));
   }
   return (dictionaryBlocks, batchBlocks);
 }
 
-int _countDictionaries(ArrowDataType type) =>
-    (_dictionaryType(type) != null ? 1 : 0) +
-    _childFields(type).fold(0, (sum, f) => sum + _countDictionaries(f.type));
+/// Emits dictionary [id] unless identical to what was already written.
+_Block? _dictionaryDelta(
+  _MessageSink out,
+  int id,
+  ArrowArray dictionary,
+  Map<int, ArrowArray> written,
+  bool file,
+) {
+  final previous = written[id];
+  if (previous != null && _sameValues(previous, dictionary)) return null;
+  if (previous != null && _isDictionaryPrefix(previous, dictionary)) {
+    written[id] = dictionary;
+    final delta = _arrayWithDictionaries(
+      dictionary.type,
+      dictionary.values.sublist(previous.length),
+      _columnDictionaries(dictionary),
+    );
+    return _writeDictionary(out, id, delta, isDelta: true);
+  }
+  if (previous != null && file) {
+    throw UnsupportedError(
+      'IPC files cannot replace a dictionary between batches',
+    );
+  }
+  written[id] = dictionary;
+  return _writeDictionary(out, id, dictionary);
+}
 
 bool _sameValues(ArrowArray a, ArrowArray b) {
   if (identical(a, b)) return true;
   if (a.length != b.length) return false;
   for (var i = 0; i < a.length; i++) {
     if (a.values[i] != b.values[i]) return false;
+  }
+  return true;
+}
+
+bool _isDictionaryPrefix(ArrowArray previous, ArrowArray next) {
+  if (previous.length >= next.length) return false;
+  for (var i = 0; i < previous.length; i++) {
+    if (previous.values[i] != next.values[i]) return false;
   }
   return true;
 }
@@ -485,13 +539,18 @@ Uint8List _int64s(List<int> values) {
   return data.buffer.asUint8List();
 }
 
-_Block _writeDictionary(_MessageSink out, int id, ArrowArray dictionary) {
+_Block _writeDictionary(
+  _MessageSink out,
+  int id,
+  ArrowArray dictionary, {
+  bool isDelta = false,
+}) {
   final (batch, body) = _encodeBody(dictionary.length, [
     (dictionary.type, dictionary.values),
   ]);
   return out.message(
     _headerDictionaryBatch,
-    _FbTableObject({0: _fbI64(id), 1: _FbRef(batch), 2: _fbBool(false)}),
+    _FbTableObject({0: _fbI64(id), 1: _FbRef(batch), 2: _fbBool(isDelta)}),
     body,
   );
 }
