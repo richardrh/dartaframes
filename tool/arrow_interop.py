@@ -821,7 +821,15 @@ def extension_fixtures() -> list[Fixture]:
     raw = pa.record_batch([pa.array([1, None], pa.int32())], schema=raw_schema)
     uuid_schema = pa.schema([_ext_field("uuid", pa.binary(16), "arrow.uuid")])
     uuid = pa.record_batch([pa.array([bytes(range(16)), None, b"\xff" * 16], pa.binary(16))], schema=uuid_schema)
+    dictionary = pa.DictionaryArray.from_arrays(
+        pa.array([0, None, 1, 0], pa.int8()), pa.array(['red', 'blue'])
+    )
+    dictionary_schema = pa.schema([
+        _ext_field('encoded', dictionary.type, 'dartaframes.test.dictionary', b'{"kind":"label"}')
+    ])
+    dictionary_batch = pa.record_batch([dictionary], schema=dictionary_schema)
     return [
+        Fixture('extension', 'dictionary', 'extension annotation over dictionary storage', dictionary_schema, [dictionary_batch]),
         Fixture("extension", "extensions", "canonical (json/bool8) and custom extension metadata", schema, [batch]),
         Fixture("extension", "uuid", "arrow.uuid over fixed_size_binary(16)", uuid_schema, [uuid]),
         Fixture(

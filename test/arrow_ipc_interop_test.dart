@@ -32,22 +32,6 @@ const _root = 'test/fixtures/arrow_ipc';
 /// the error type it is expected to raise. Keep in sync with lib/arrow.dart
 /// documentation of unsupported families.
 const Map<String, Type> _knownGaps = {
-  'binary/string_view': UnsupportedError,
-  'binary/binary_view': UnsupportedError,
-  'binary/fixed_size_binary': UnsupportedError,
-  'temporal/interval_month_day_nano': UnsupportedError,
-  'decimal/decimal32_9_2': UnsupportedError,
-  'decimal/decimal64_18_4': UnsupportedError,
-  'decimal/decimal256_76_20': UnsupportedError,
-  'nested/maps': UnsupportedError,
-  'nested/list_views': UnsupportedError,
-  'dictionary/nested_dictionary': UnsupportedError,
-  'union/sparse': UnsupportedError,
-  'union/dense': UnsupportedError,
-  'ree/ree16_i32': UnsupportedError,
-  'ree/ree32_utf8': UnsupportedError,
-  'ree/ree64_f64': UnsupportedError,
-  'extension/uuid': UnsupportedError,
   // Arrow metadata values are arbitrary bytes; the Dart model stores
   // Map<String, String> and deliberately refuses lossy decoding.
   'extension/binary_metadata': FormatException,
@@ -183,7 +167,7 @@ Map<String, Object?> _summarize(ArrowTable table) {
                   v == null
                       ? null
                       : _int(
-                          (v as ArrowDictionaryIndexValue).index,
+                          (_storageValue(v) as ArrowDictionaryIndexValue).index,
                           ((_storage(
                                     field.type,
                                   ) as ArrowDictionaryType).indexType
@@ -217,19 +201,27 @@ int _nullCount(ArrowArray array) {
   return array.validity.where((v) => !v).length;
 }
 
-List<Object?> _encodeArray(ArrowArray array) {
-  final t = array.type;
-  final storage = _storage(t);
-  if (storage is ArrowDictionaryType) {
-    final dictionary = _encodeArray(array.dictionary!);
-    return [
-      for (final v in array.values)
-        v == null
-            ? null
-            : dictionary[(v as ArrowDictionaryIndexValue).index.toInt()],
-    ];
-  }
-  return [for (final v in array.values) _encode(t, v)];
+List<Object?> _encodeArray(ArrowArray array) => [
+  for (final value in array.values)
+    _encode(array.type, value, [
+      if (array.dictionary != null) array.dictionary!,
+      ...array.nestedDictionaries,
+    ]),
+];
+
+ArrowValue _storageValue(ArrowValue value) =>
+    value is ArrowExtensionValue ? _storageValue(value.storage) : value;
+
+List<ArrowArray> _childDictionaries(
+  List<ArrowField> fields,
+  int index,
+  List<ArrowArray> dictionaries,
+) {
+  int count(ArrowDataType type) =>
+      nestedDictionaryTypes(type).length +
+      (_storage(type) is ArrowDictionaryType ? 1 : 0);
+  final offset = fields.take(index).fold<int>(0, (n, f) => n + count(f.type));
+  return dictionaries.sublist(offset, offset + count(fields[index].type));
 }
 
 const _unitNames = {
@@ -245,12 +237,16 @@ Object? _int(BigInt v, int bitWidth) =>
 String _hex(List<int> bytes) =>
     bytes.map((b) => b.toRadixString(16).padLeft(2, '0')).join();
 
-Object? _encode(ArrowDataType type, ArrowValue? value) {
+Object? _encode(
+  ArrowDataType type,
+  ArrowValue? value, [
+  List<ArrowArray> dictionaries = const [],
+]) {
   if (value == null) return null;
   switch (type) {
     case ArrowExtensionType(:final storageType):
       final storage = value is ArrowExtensionValue ? value.storage : value;
-      return _encode(storageType, storage);
+      return _encode(storageType, storage, dictionaries);
     case ArrowBooleanType():
       return (value as ArrowBooleanValue).value;
     case ArrowIntegerType(:final bitWidth):
@@ -280,29 +276,55 @@ Object? _encode(ArrowDataType type, ArrowValue? value) {
     case ArrowListType(:final field) || ArrowFixedSizeListType(:final field):
       return [
         for (final item in (value as ArrowListValue).values)
-          _encode(field.type, item),
+          _encode(field.type, item, dictionaries),
       ];
     case ArrowStructType(:final fields):
       final v = value as ArrowStructValue;
       return {
         for (var i = 0; i < fields.length; i++)
-          fields[i].name: _encode(fields[i].type, v.fields[i].value),
+          fields[i].name: _encode(
+            fields[i].type,
+            v.fields[i].value,
+            _childDictionaries(fields, i, dictionaries),
+          ),
       };
     case ArrowMapType(:final keyField, :final valueField):
       return [
         for (final e in (value as ArrowMapValue).entries)
-          [_encode(keyField.type, e.key), _encode(valueField.type, e.value)],
+          [
+            _encode(
+              keyField.type,
+              e.key,
+              _childDictionaries([keyField, valueField], 0, dictionaries),
+            ),
+            _encode(
+              valueField.type,
+              e.value,
+              _childDictionaries([keyField, valueField], 1, dictionaries),
+            ),
+          ],
       ];
     case ArrowUnionType():
       final v = value as ArrowUnionValue;
       return {
         'type_code': v.typeId,
-        'value': _encode(type.fieldForTypeId(v.typeId)!.type, v.value),
+        'value': _encode(
+          type.fieldForTypeId(v.typeId)!.type,
+          v.value,
+          _childDictionaries(
+            type.fields,
+            type.typeIds.indexOf(v.typeId),
+            dictionaries,
+          ),
+        ),
       };
     case ArrowRunEndEncodedType(:final valuesField):
-      return _encode(valuesField.type, value);
-    case ArrowNullType():
+      return _encode(valuesField.type, value, dictionaries);
     case ArrowDictionaryType():
+      return _encodeArray(
+        dictionaries.first,
+      )[(value as ArrowDictionaryIndexValue).index.toInt()];
+    case ArrowNullType():
       throw StateError('unexpected value for $type');
   }
 }

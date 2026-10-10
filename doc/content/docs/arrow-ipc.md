@@ -3,31 +3,11 @@ title: Arrow IPC
 weight: 3
 ---
 
-`package:dartaframes_polars/arrow.dart` includes standard Apache Arrow IPC
-(columnar format metadata version V5) readers and writers for the owned
-logical Arrow model. They run in pure Dart, need no native Polars library, and
-interoperate with other Arrow implementations such as PyArrow.
+`package:dartaframes_polars/arrow.dart` provides owned Arrow values and standard
+Apache Arrow IPC V5 file and stream codecs. The Arrow implementation is pure
+Dart and does not call Polars. It remains in this package for now.
 
-## What the codecs operate on
-
-The IPC codecs convert between bytes and the package's owned, copied logical
-values: `ArrowSchema`, `ArrowField`, `ArrowArray`, `RecordBatch`, and the
-`ArrowTable` returned by `readTable()`. Decoding copies buffer
-contents into Dart objects. There is no zero-copy access, no memory mapping,
-and no asynchronous or incremental file I/O. Callers pass a complete
-`Uint8List` in and receive a complete `Uint8List` out, so read and write the
-bytes yourself (for example with `File.readAsBytes`).
-
-## API
-
-| Class | Format |
-| --- | --- |
-| `ArrowIpcStreamWriter` / `ArrowIpcStreamReader` | IPC streaming format (`.arrows`) |
-| `ArrowIpcFileWriter` / `ArrowIpcFileReader` | IPC random-access file format (`.arrow`, `ARROW1` magic and footer) |
-| `ArrowIpcLimits` | Reader resource bounds |
-
-A runnable example lives in
-[`example/arrow_ipc.dart`](../../../example/arrow_ipc.dart):
+## Use the codecs
 
 ```dart
 final stream = ArrowIpcStreamWriter(schema: schema, batches: [batch]).write();
@@ -39,93 +19,100 @@ final file = ArrowIpcFileWriter(
 final fromFile = ArrowIpcFileReader(file).readTable();
 ```
 
-```sh
-dart run example/arrow_ipc.dart
-```
+Run the complete repository example with `dart run example/arrow_ipc.dart`.
+Readers accept a complete `Uint8List` and return an `ArrowTable` containing its
+schema and record batches. Writers return complete bytes. File-system I/O is
+left to the caller. This is not incremental asynchronous I/O, memory mapping,
+or zero-copy access: decoding materializes owned Dart values.
 
-## Compression and dependencies
+## Supported standard families
 
-The IPC code is not dependency-free. FlatBuffers metadata is parsed and
-produced in-tree, but compressed record batch bodies use the pure Dart
-[`libcompress`](https://pub.dev/packages/libcompress) package on the Dart VM.
+The independent PyArrow fixture suite exercises both file and stream formats:
 
-| Platform | `LZ4_FRAME` read | `ZSTD` read | Write |
+| Family | Coverage |
+| --- | --- |
+| Primitive | Null, boolean, signed/unsigned 8/16/32/64-bit integers, float16/32/64 with raw bit preservation |
+| Binary and text | UTF-8, binary, large offsets, fixed-size binary, string/binary views |
+| Decimal | Decimal32/64/128/256, including negative scales |
+| Temporal | Dates, times, timestamps with time-zone metadata, durations, intervals |
+| Nested | Lists, large/fixed-size lists, list views, structs, maps |
+| Dictionary | Root and nested dictionaries, extension-wrapped dictionaries, stream replacement and deltas |
+| Other layouts | Sparse/dense unions and run-end encoding |
+| Metadata | Schema/field string metadata and extension annotations |
+| Structure | Multiple/empty batches, zero rows and positive-row zero-column batches |
+
+An `ArrowArray` owns its values. Dictionary arrays also carry a `dictionary`;
+`nestedDictionaries` carries dictionaries for nested type occurrences in
+schema depth-first preorder. `RecordBatch.slice` preserves these sidecars.
+Run-end encoded logical values are materialized, not stored as a zero-copy
+compressed view.
+
+The standalone types are broader than the Polars copied-batch protocol.
+`RecordBatchCodec` rejects unsupported types and nested dictionary sidecars
+before native transport. Standard Arrow support does not imply native Polars
+support for every layout.
+
+## Compression
+
+FlatBuffers metadata is implemented in-tree. The VM compression implementation
+uses the pure Dart `libcompress` dependency.
+
+| Platform | LZ4_FRAME read | ZSTD read | Write |
 | --- | --- | --- | --- |
-| Dart VM (native, AOT, JIT) | yes (libcompress) | yes (libcompress) | uncompressed only |
-| Web (dart2js, dart2wasm) | yes (in-tree LZ4 frame decoder) | no, `UnsupportedError` | uncompressed only |
+| Dart VM | yes | yes | uncompressed |
+| Web, tested with dart2js and Firefox | yes | explicitly unsupported | uncompressed |
 
-Writers always emit uncompressed bodies. Readers accept compressed input
-produced by other implementations.
+The web LZ4 decoder checks bounds, frame structure, back-references and declared
+sizes. It consumes but does not verify frame checksums; do not treat it as an
+integrity or authenticity check. External LZ4 dictionaries are unsupported.
 
-## Limits and deliberate scope
+## Deliberate limits
 
-- **Little-endian only.** Big-endian schemas are rejected.
-- **Bounded readers.** `ArrowIpcLimits` caps input sizes, metadata, nesting and
-  buffer lengths. Malformed or truncated input raises `FormatException`
-  instead of reading out of bounds. Unsupported but well-formed input raises
-  `UnsupportedError`.
-- **`int128` / `uint128` are binding extensions,** not Apache Arrow types.
-  They have no standard IPC encoding, so writers reject them rather than
-  produce non-standard files.
-- **Dictionaries** are supported at the top level of a schema, including
-  replacement and delta dictionaries in streams. Nested dictionaries are
-  rejected.
+- Little-endian IPC only. Big-endian input is rejected.
+- `ArrowIpcLimits` bounds nesting, fields, nodes, buffers, rows, messages,
+  dictionaries and total materialized values. Raise limits explicitly for
+  larger trusted inputs. Run-end expansion and decompression obey bounds.
+- `int128` and `uint128` are binding extensions, not standard Arrow integer
+  types, and cannot be written to IPC.
+- Metadata uses `Map<String, String>`. Non-UTF-8 metadata is rejected rather
+  than decoded lossily. Duplicate metadata keys cannot be represented.
+- A field has one extension annotation. Stacked extensions and a dictionary
+  whose value type is an extension are rejected on write. Use the canonical
+  extension-over-dictionary form. Supply annotations through
+  `ArrowExtensionType`, not reserved `ARROW:extension:*` field metadata keys.
+- This is not a claim of complete Apache Arrow specification conformance.
 
-## Verified interoperability
+## Independent verification
 
-Capability is claimed only where a PyArrow fixture passes both directions:
-PyArrow writes, Dart reads, Dart rewrites, PyArrow reads and validates. The
-fixtures are generated by `tool/arrow_interop.py` (PyArrow 26.0.0) under
-`test/fixtures/arrow_ipc`.
+The committed fixtures come from PyArrow 26.0.0. Tests compare schema, metadata,
+nulls, batch boundaries, dictionary values and physical indices, exact floating
+bits, unscaled decimals, and temporal counters. Ordinary Dart CI reads these
+fixtures without requiring Python.
 
-Passing in both file and stream formats as of this page:
+The implementation reads and rewrites **88 of 90 IPC fixtures**, and PyArrow
+reads and validates all 88 rewritten outputs. The remaining two fixtures are
+the file/stream forms of deliberately rejected non-UTF-8 metadata. The same
+90-fixture read probe against `meshagent_dart_arrow` 0.53.4 accepted the same 88
+and rejected the same two. This establishes the tested capability target, not
+identical APIs, performance, or exhaustive conformance.
 
-- primitive: integers, floats, booleans, nulls
-- binary: binaries, strings, sliced strings
-- decimal: decimal128 (5,0), decimal128 (38,10), negative scale
-- temporal: date, time, timestamp, duration
-- nested: lists, nested lists, sliced list, structs
-- dictionary: dictionaries, shared across batches, replacement, delta
-- extension: unregistered extension storage plus `ARROW:extension:*` metadata
-- metadata: schema and field custom metadata
-- structure: multiple batches, no batches, zero rows, zero columns, 1000 rows
-- compression: LZ4 frame and Zstandard input (VM)
-
-Fixtures that currently fail or are rejected. Some of these families are
-under active development, so check the oracle output rather than this list
-for the current state:
-
-- binary views, string views, fixed-size binary (including the `uuid`
-  extension)
-- decimal32, decimal64, decimal256
-- interval month-day-nano
-- list views, maps
-- sparse and dense unions
-- run-end encoding
-- nested dictionaries
-- extension metadata with non-UTF-8 values
-
-## Reproducing the oracle
-
-Create an isolated PyArrow environment once, then run the round trip:
+To reproduce the independent oracle from the repository root:
 
 ```sh
-python3 -m venv ~/.jcode/scratch/arrow-oracle
-P=~/.jcode/scratch/arrow-oracle/bin/python
+python3 -m venv build/arrow-oracle
+P=build/arrow-oracle/bin/python
 $P -m pip install pyarrow==26.0.0
-
-$P tool/arrow_interop.py check               # committed fixtures are current
-$P tool/arrow_interop.py verify --self-test  # oracle sanity check
+$P tool/arrow_interop.py check
+$P tool/arrow_interop.py verify --self-test
 dart run tool/arrow_interop.dart --out build/arrow_ipc_dart
-$P tool/arrow_interop.py verify --output build/arrow_ipc_dart
+$P tool/arrow_interop.py verify --output build/arrow_ipc_dart --require-all
 ```
 
-`verify` prints `PASS`, `FAIL`, or `MISSING` per fixture. `MISSING` means the
-Dart reader rejected that fixture so no Dart output exists. Add
-`--require-all` to make missing fixtures fail, and `--only <family>` to narrow
-the run. Dart unit tests cover the same codecs:
+The last two commands report the non-UTF-8 limitation; `--require-all` exits
+nonzero for those two missing outputs. Use `--only <family>` to verify one
+family strictly. The ordinary CI suite treats those inputs as explicit
+negative tests and requires every other fixture to pass:
 
 ```sh
-dart test test/arrow_ipc_test.dart test/arrow_ipc_schema_test.dart \
-  test/arrow_ipc_compression_test.dart
+dart test test/arrow_ipc_interop_test.dart
 ```

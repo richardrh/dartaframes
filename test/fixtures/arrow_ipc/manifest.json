@@ -344,6 +344,16 @@
   },
   {
    "family": "extension",
+   "name": "dictionary",
+   "formats": [
+    "file",
+    "stream"
+   ],
+   "expectation": "extension/dictionary.json",
+   "optional": false
+  },
+  {
+   "family": "extension",
    "name": "extensions",
    "formats": [
     "file",
