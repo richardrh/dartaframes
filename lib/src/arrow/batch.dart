@@ -36,4 +36,26 @@ final class RecordBatch {
   final int rowCount;
   int get length => rowCount;
   int get columnCount => columns.length;
+
+  /// Returns an owned copy of a row range while retaining schema metadata.
+  ///
+  /// Dictionaries are immutable and shared with the source. Other value lists
+  /// are copied; this method does not promise zero-copy physical buffers.
+  RecordBatch slice(int offset, [int? length]) {
+    if (offset < 0 || offset > rowCount) {
+      throw RangeError.range(offset, 0, rowCount, 'offset');
+    }
+    final count = length ?? rowCount - offset;
+    if (count < 0 || count > rowCount - offset) {
+      throw RangeError.range(count, 0, rowCount - offset, 'length');
+    }
+    return RecordBatch(schema, [
+      for (final column in columns)
+        ArrowArray(
+          column.type,
+          column.values.sublist(offset, offset + count),
+          dictionary: column.dictionary,
+        ),
+    ], rowCount: count);
+  }
 }
