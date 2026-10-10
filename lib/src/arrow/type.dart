@@ -123,15 +123,7 @@ sealed class ArrowDataType {
       case 'float64':
         return ArrowFloatingType(64);
       case 'decimal':
-        final bitWidth = json['bitWidth'];
-        if (bitWidth != null && bitWidth is! int) {
-          throw const FormatException('dtype.bitWidth must be an integer');
-        }
-        return ArrowDecimalType(
-          integer('precision'),
-          integer('scale'),
-          bitWidth: (bitWidth as int?) ?? 128,
-        );
+        return _decimalFromJson(json, integer);
       case 'string':
       case 'utf8':
         return const ArrowUtf8Type();
@@ -160,19 +152,6 @@ sealed class ArrowDataType {
         return ArrowTimeType(ArrowTimeUnit.parse(string('unit')));
       case 'list':
         return ArrowListType(ArrowField.fromJson(object('field')));
-      case 'largeList':
-        return ArrowListType(
-          ArrowField.fromJson(object('field')),
-          offsetWidth: ArrowOffsetWidth.large,
-        );
-      case 'listView':
-        return ArrowListType(ArrowField.fromJson(object('field')), view: true);
-      case 'largeListView':
-        return ArrowListType(
-          ArrowField.fromJson(object('field')),
-          offsetWidth: ArrowOffsetWidth.large,
-          view: true,
-        );
       case 'fixedSizeList':
       case 'array':
         return ArrowFixedSizeListType(
@@ -210,6 +189,21 @@ sealed class ArrowDataType {
     }
   }
 
+  static ArrowDecimalType _decimalFromJson(
+    Map<String, Object?> json,
+    int Function(String) integer,
+  ) {
+    final bitWidth = json['bitWidth'];
+    if (bitWidth != null && bitWidth is! int) {
+      throw const FormatException('dtype.bitWidth must be an integer');
+    }
+    return ArrowDecimalType(
+      integer('precision'),
+      integer('scale'),
+      bitWidth: (bitWidth as int?) ?? 128,
+    );
+  }
+
   static ArrowDataType _extendedFromJson(
     String kind,
     Map<String, Object?> json,
@@ -220,6 +214,19 @@ sealed class ArrowDataType {
   ) {
     ArrowField field(String name) => ArrowField.fromJson(object(name));
     switch (kind) {
+      case 'largeList':
+        return ArrowListType(
+          field('field'),
+          offsetWidth: ArrowOffsetWidth.large,
+        );
+      case 'listView':
+        return ArrowListType(field('field'), view: true);
+      case 'largeListView':
+        return ArrowListType(
+          field('field'),
+          offsetWidth: ArrowOffsetWidth.large,
+          view: true,
+        );
       case 'stringView':
       case 'utf8View':
         return const ArrowUtf8Type(ArrowOffsetWidth.view);
