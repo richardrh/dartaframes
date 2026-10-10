@@ -73,8 +73,9 @@ final class RecordBatchCodec {
     if (value == null) return null;
     final raw = value is Map ? value['value'] : value;
     final counter = BigInt.tryParse(raw.toString());
-    if (counter == null)
+    if (counter == null) {
       throw FormatException('Invalid temporal counter: $raw');
+    }
     final scaled = counter * BigInt.from(multiplier);
     if (scaled < -(BigInt.one << 63) ||
         scaled > (BigInt.one << 63) - BigInt.one) {

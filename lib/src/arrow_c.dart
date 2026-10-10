@@ -140,8 +140,9 @@ final class ArrowCStream implements Finalizable {
 
   /// Marks the stream moved into a consumer. For transport implementations.
   void markConsumed() {
-    if (_closed || _consumed)
+    if (_closed || _consumed) {
       throw StateError('Arrow C Stream is not available');
+    }
     _consumed = true;
   }
 

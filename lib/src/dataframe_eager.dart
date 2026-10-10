@@ -29,7 +29,9 @@ extension EagerDataFrameOperations on DataFrame {
     if (!allowEmpty && values.isEmpty) {
       throw ArgumentError.value(expressions, field, 'must not be empty');
     }
-    for (final value in values) _runtime._requireExpr(value);
+    for (final value in values) {
+      _runtime._requireExpr(value);
+    }
     final leases = _leaseAll([_owner, ...values.map((value) => value._owner)]);
     try {
       return _runtime._adoptFrame(

@@ -24,8 +24,9 @@ final class ExprDateTimeNameSpace {
   Expr timestamp([TimeUnit unit = TimeUnit.microseconds]) =>
       _expr._function('dt.timestamp', options: {'timeUnit': unit.json});
   Expr format(String format) {
-    if (format.isEmpty)
+    if (format.isEmpty) {
       throw ArgumentError.value(format, 'format', 'must not be empty');
+    }
     return _expr._function('dt.format', options: {'format': format});
   }
 

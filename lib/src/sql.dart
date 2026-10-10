@@ -98,7 +98,9 @@ final class SqlContext {
         _releaseAll(leases);
       }
     } finally {
-      for (final frame in temporary.reversed) frame.close();
+      for (final frame in temporary.reversed) {
+        frame.close();
+      }
     }
   }
 

@@ -79,9 +79,12 @@ final class ExprStructNameSpace {
       _expr._function('struct.fieldAt', options: {'index': index});
   Expr renameFields(Iterable<String> names) {
     final values = List<String>.unmodifiable(names);
-    if (values.isEmpty)
+    if (values.isEmpty) {
       throw ArgumentError.value(names, 'names', 'must not be empty');
-    for (final value in values) _validateName(value, 'names');
+    }
+    for (final value in values) {
+      _validateName(value, 'names');
+    }
     return _expr._function('struct.renameFields', options: {'fields': values});
   }
 

@@ -1,5 +1,14 @@
 # Changelog
 
+## Unreleased
+
+- Enable Dart core lints in local analysis and CI, and add explicit control-flow
+  braces without changing runtime behavior.
+- Expand public API documentation for errors, runtime entry points, and data
+  types.
+- Add a pub.dev-discoverable example guide while preserving the existing
+  runnable native/Arrow example and its paths.
+
 ## 0.1.1
 
 - **Breaking:** removed the custom SQLite connection and XLSX reader/writer

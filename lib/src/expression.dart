@@ -427,7 +427,9 @@ final class Expr {
         _releaseAll(leases);
       }
     } finally {
-      for (final value in temporary.reversed) value.close();
+      for (final value in temporary.reversed) {
+        value.close();
+      }
     }
   }
 }
