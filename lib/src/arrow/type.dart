@@ -164,6 +164,7 @@ sealed class ArrowDataType {
           throw const FormatException('dtype.fields must be a list');
         }
         return ArrowStructType(
+          allowDuplicateNames: true,
           fields.indexed
               .map(
                 (e) => ArrowField.fromJson(
@@ -242,6 +243,7 @@ sealed class ArrowDataType {
           entriesName: json.containsKey('entriesName')
               ? string('entriesName')
               : 'entries',
+          entriesMetadata: _stringMap(json['entriesMetadata']),
         );
       case 'union':
         final fields = json['fields'];
@@ -502,8 +504,12 @@ final class ArrowFixedSizeListType extends ArrowDataType {
 }
 
 final class ArrowStructType extends ArrowDataType {
-  ArrowStructType(List<ArrowField> fields)
+  /// Creates a struct. Duplicate child names are rejected unless
+  /// [allowDuplicateNames] is true; Arrow itself permits them, so decoders of
+  /// standard data (JSON, IPC) pass true. The flag is not serialized.
+  ArrowStructType(List<ArrowField> fields, {bool allowDuplicateNames = false})
     : fields = List.unmodifiable(fields) {
+    if (allowDuplicateNames) return;
     final names = <String>{};
     for (final field in fields) {
       if (!names.add(field.name)) {
@@ -569,7 +575,8 @@ final class ArrowMapType extends ArrowDataType {
     this.valueField, {
     this.keysSorted = false,
     this.entriesName = 'entries',
-  }) {
+    Map<String, String> entriesMetadata = const {},
+  }) : entriesMetadata = Map.unmodifiable(entriesMetadata) {
     if (keyField.nullable) {
       throw ArgumentError.value(keyField, 'keyField', 'must be non-nullable');
     }
@@ -582,11 +589,15 @@ final class ArrowMapType extends ArrowDataType {
   final bool keysSorted;
   final String entriesName;
 
+  /// Metadata of the physical entries child field, preserved for fidelity.
+  final Map<String, String> entriesMetadata;
+
   /// The physical child field: a non-null struct of key and value.
   ArrowField get entriesField => ArrowField(
     entriesName,
     ArrowStructType([keyField, valueField]),
     nullable: false,
+    metadata: entriesMetadata,
   );
   @override
   Map<String, Object?> toJson() => {
@@ -595,6 +606,7 @@ final class ArrowMapType extends ArrowDataType {
     'value': valueField.toJson(),
     'keysSorted': keysSorted,
     if (entriesName != 'entries') 'entriesName': entriesName,
+    if (entriesMetadata.isNotEmpty) 'entriesMetadata': entriesMetadata,
   };
 }
 
@@ -703,4 +715,17 @@ Map<String, Object?> _stringObjectMap(Object? value, String path) {
     result[entry.key as String] = entry.value;
   }
   return result;
+}
+
+Map<String, String> _stringMap(Object? value) {
+  if (value == null) return const {};
+  final map = _stringObjectMap(value, 'dtype.entriesMetadata');
+  return {
+    for (final MapEntry(:key, :value) in map.entries)
+      key: value is String
+          ? value
+          : throw FormatException(
+              'dtype.entriesMetadata.$key must be a string',
+            ),
+  };
 }

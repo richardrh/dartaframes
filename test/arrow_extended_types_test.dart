@@ -267,6 +267,37 @@ void main() {
     });
   });
 
+  test('struct duplicate names are opt-in and accepted from JSON', () {
+    final a = ArrowField('a', int32);
+    expect(() => ArrowStructType([a, a]), throwsArgumentError);
+    final dup = ArrowStructType([a, a], allowDuplicateNames: true);
+    expect(ArrowDataType.fromJson(dup.toJson()), dup);
+  });
+
+  test('map entries metadata is preserved', () {
+    final map = ArrowMapType(
+      ArrowField('k', int32, nullable: false),
+      ArrowField('v', int32),
+      entriesMetadata: {'x': 'y'},
+    );
+    expect(map.entriesField.metadata, {'x': 'y'});
+    expect(ArrowDataType.fromJson(map.toJson()), map);
+    expect(
+      ArrowMapType(
+        ArrowField('k', int32, nullable: false),
+        ArrowField('v', int32),
+      ).toJson().containsKey('entriesMetadata'),
+      isFalse,
+    );
+    expect(
+      () => ArrowDataType.fromJson({
+        ...map.toJson(),
+        'entriesMetadata': {'x': 1},
+      }),
+      throwsFormatException,
+    );
+  });
+
   test('float64 bits are exact for negative values', () {
     expect(
       ArrowFloatingValue.float64(-0.0).hexadecimalBits,
