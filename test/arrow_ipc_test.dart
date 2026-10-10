@@ -20,6 +20,16 @@ int _slot(ByteData data, int table, int field) {
 
 int _ref(ByteData data, int at) => at + data.getUint32(at, Endian.little);
 
+int _i64(ByteData data, int at) =>
+    data.getInt32(at + 4, Endian.little) * 4294967296 +
+    data.getUint32(at, Endian.little);
+
+void _putI64(ByteData data, int at, int value) {
+  final low = value % 4294967296;
+  data.setUint32(at, low, Endian.little);
+  data.setInt32(at + 4, (value - low) ~/ 4294967296, Endian.little);
+}
+
 List<({int start, int end, int header, int kind})> _messages(Uint8List bytes) {
   final data = ByteData.sublistView(bytes);
   final result = <({int start, int end, int header, int kind})>[];
@@ -29,9 +39,7 @@ List<({int start, int end, int header, int kind})> _messages(Uint8List bytes) {
     if (length == 0) break;
     final message = _ref(data, start + 8);
     final bodySlot = _slot(data, message, 3);
-    final bodyLength = bodySlot == 0
-        ? 0
-        : data.getInt64(bodySlot, Endian.little);
+    final bodyLength = bodySlot == 0 ? 0 : _i64(data, bodySlot);
     final end = start + 8 + length + bodyLength;
     result.add((
       start: start,
@@ -87,7 +95,11 @@ List<int> _schemaDictionaryIdSlots(Uint8List bytes) {
   );
   final columns = <(String, ArrowDataType, List<ArrowValue?>)>[
     ('i8', ArrowIntegerType(8), [_i(-128), null, _i(127)]),
-    ('i64', ArrowIntegerType(64), [_i(-(1 << 62)), _i(0), null]),
+    (
+      'i64',
+      ArrowIntegerType(64),
+      [ArrowIntegerValue(-(BigInt.one << 62)), _i(0), null],
+    ),
     (
       'u64',
       ArrowIntegerType(64, signed: false),
@@ -348,7 +360,7 @@ void main() {
       final data = ByteData.sublistView(bytes);
       final batch = _messages(bytes).last;
       final buffers = _ref(data, _slot(data, batch.header, 2));
-      final indicesOffset = data.getInt64(buffers + 4 + 16, Endian.little);
+      final indicesOffset = _i64(data, buffers + 4 + 16);
       final body =
           batch.start + 8 + data.getInt32(batch.start + 4, Endian.little);
       bytes[body + indicesOffset] = 127;
@@ -488,15 +500,11 @@ void main() {
       final bytes = twoFields();
       final data = ByteData.sublistView(bytes);
       for (final at in _schemaDictionaryIdSlots(bytes)) {
-        data.setInt64(at, -7, Endian.little);
+        _putI64(data, at, -7);
       }
       final messages = _messages(bytes);
       final dictionaries = messages.where((m) => m.kind == 2).toList();
-      data.setInt64(
-        _slot(data, dictionaries.first.header, 0),
-        -7,
-        Endian.little,
-      );
+      _putI64(data, _slot(data, dictionaries.first.header, 0), -7);
       final dropped = dictionaries.last;
       final shared = Uint8List.fromList([
         ...bytes.sublist(0, dropped.start),
@@ -515,7 +523,7 @@ void main() {
       final bytes = twoFields(incompatible: true);
       final data = ByteData.sublistView(bytes);
       for (final at in _schemaDictionaryIdSlots(bytes)) {
-        data.setInt64(at, -1, Endian.little);
+        _putI64(data, at, -1);
       }
       expect(
         () => ArrowIpcStreamReader(bytes).readTable(),
@@ -531,7 +539,7 @@ void main() {
       final first = dictionaries.first;
       final unknown = Uint8List.fromList(original);
       final data = ByteData.sublistView(unknown);
-      data.setInt64(_slot(data, first.header, 0), 999, Endian.little);
+      _putI64(data, _slot(data, first.header, 0), 999);
       expect(
         () => ArrowIpcStreamReader(unknown).readTable(),
         throwsFormatException,
@@ -800,7 +808,7 @@ void main() {
         );
       }
       final outside = Uint8List.fromList(file);
-      ByteData.sublistView(outside).setInt64(block, footerStart, Endian.little);
+      _putI64(ByteData.sublistView(outside), block, footerStart);
       expect(
         () => ArrowIpcFileReader(outside).readTable(),
         throwsFormatException,
@@ -856,7 +864,7 @@ void main() {
         expect(
           () => ArrowIpcStreamReader(
             evil,
-            limits: const ArrowIpcLimits(maxRows: 1 << 40),
+            limits: const ArrowIpcLimits(maxRows: 1099511627776),
           ).readTable(),
           throwsA(
             isA<FormatException>().having(
