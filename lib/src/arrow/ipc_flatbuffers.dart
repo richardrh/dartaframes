@@ -337,16 +337,15 @@ final class _FbTableView {
     return utf8.decode(bytes);
   }
 
-  List<_FbTableView> tables(int id) {
+  Iterable<_FbTableView> tables(int id) sync* {
     final p = _field(id, 4);
-    if (p < 0) return const [];
+    if (p < 0) return;
     final start = _indirect(p);
     final count = reader.u32(start);
     reader.check(start + 4, count * 4);
-    return List.generate(
-      count,
-      (i) => _FbTableView(reader, _indirect(start + 4 + 4 * i)),
-    );
+    for (var i = 0; i < count; i++) {
+      yield _FbTableView(reader, _indirect(start + 4 + 4 * i));
+    }
   }
 
   _FbStructs structs(int id, int elementSize) {

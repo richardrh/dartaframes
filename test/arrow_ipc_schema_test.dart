@@ -2,6 +2,50 @@ import 'package:dartaframes_polars/arrow.dart';
 import 'package:test/test.dart';
 
 void main() {
+  test('schema field count and depth limits reject before materialization', () {
+    final schema = ArrowSchema([
+      for (var i = 0; i < 8; i++) ArrowField('f$i', const ArrowNullType()),
+    ]);
+    final bytes = ArrowIpcStreamWriter(schema: schema, batches: []).write();
+    expect(
+      () => ArrowIpcStreamReader(
+        bytes,
+        limits: const ArrowIpcLimits(maxFields: 7),
+      ).readTable(),
+      throwsFormatException,
+    );
+    expect(
+      ArrowIpcStreamReader(
+        bytes,
+        limits: const ArrowIpcLimits(maxFields: 8),
+      ).readTable().schema,
+      schema,
+    );
+    final nested = ArrowSchema([
+      ArrowField(
+        'parent',
+        ArrowListType(ArrowField('child', const ArrowUtf8Type())),
+      ),
+    ]);
+    final data = ArrowIpcStreamWriter(schema: nested, batches: []).write();
+    expect(
+      () => ArrowIpcStreamReader(
+        data,
+        limits: const ArrowIpcLimits(maxDepth: 0),
+      ).readTable(),
+      throwsFormatException,
+    );
+  });
+  test('map children may share a standard Arrow field name', () {
+    final type = ArrowMapType(
+      ArrowField('same', const ArrowUtf8Type(), nullable: false),
+      ArrowField('same', ArrowIntegerType(32)),
+      allowDuplicateNames: true,
+    );
+    final schema = ArrowSchema([ArrowField('map', type)]);
+    final bytes = ArrowIpcStreamWriter(schema: schema, batches: []).write();
+    expect(ArrowIpcStreamReader(bytes).readTable().schema, schema);
+  });
   test('IPC rejects wrapper compositions it cannot preserve', () {
     for (final type in <ArrowDataType>[
       ArrowExtensionType(

@@ -326,7 +326,7 @@ _SchemaDescriptor _readSchema(_FbTableView table, ArrowIpcLimits limits) {
         ordered: dictionary.boolean(2, false),
       );
       final existing = dictionaries[dictionaryId];
-      if (existing != null && existing != dtype) {
+      if (existing != null && existing.valueType != dtype.valueType) {
         throw const FormatException('Conflicting shared IPC dictionary types');
       }
       dictionaries[dictionaryId] = dtype;
@@ -474,6 +474,7 @@ ArrowDataType _readNestedType(
         keysSorted: table.boolean(0, false),
         entriesName: entries.name,
         entriesMetadata: entries.metadata,
+        allowDuplicateNames: true,
       );
     case 21:
       return ArrowListType(single(), offsetWidth: ArrowOffsetWidth.large);
