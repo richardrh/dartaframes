@@ -244,6 +244,7 @@ sealed class ArrowDataType {
               ? string('entriesName')
               : 'entries',
           entriesMetadata: _stringMap(json['entriesMetadata']),
+          allowDuplicateNames: true,
         );
       case 'union':
         final fields = json['fields'];
@@ -576,11 +577,12 @@ final class ArrowMapType extends ArrowDataType {
     this.keysSorted = false,
     this.entriesName = 'entries',
     Map<String, String> entriesMetadata = const {},
+    this.allowDuplicateNames = false,
   }) : entriesMetadata = Map.unmodifiable(entriesMetadata) {
     if (keyField.nullable) {
       throw ArgumentError.value(keyField, 'keyField', 'must be non-nullable');
     }
-    if (keyField.name == valueField.name) {
+    if (!allowDuplicateNames && keyField.name == valueField.name) {
       throw ArgumentError('Map key and value fields need distinct names');
     }
   }
@@ -589,13 +591,20 @@ final class ArrowMapType extends ArrowDataType {
   final bool keysSorted;
   final String entriesName;
 
+  /// Whether key and value fields may share a name (valid Arrow; readers of
+  /// standard data pass true). Not serialized.
+  final bool allowDuplicateNames;
+
   /// Metadata of the physical entries child field, preserved for fidelity.
   final Map<String, String> entriesMetadata;
 
   /// The physical child field: a non-null struct of key and value.
   ArrowField get entriesField => ArrowField(
     entriesName,
-    ArrowStructType([keyField, valueField]),
+    ArrowStructType([
+      keyField,
+      valueField,
+    ], allowDuplicateNames: allowDuplicateNames),
     nullable: false,
     metadata: entriesMetadata,
   );

@@ -92,6 +92,10 @@ final class OwnedBatchJsonCodec {
         .toList(),
     if (array.dictionary case final dictionary?)
       'dictionary': _anonymousArrayToJson(dictionary),
+    if (array.nestedDictionaries.isNotEmpty)
+      'nestedDictionaries': array.nestedDictionaries
+          .map(_anonymousArrayToJson)
+          .toList(),
   };
 
   Map<String, Object?> _anonymousArrayToJson(ArrowArray array) => {
@@ -102,6 +106,10 @@ final class OwnedBatchJsonCodec {
         .toList(),
     if (array.dictionary case final dictionary?)
       'dictionary': _anonymousArrayToJson(dictionary),
+    if (array.nestedDictionaries.isNotEmpty)
+      'nestedDictionaries': array.nestedDictionaries
+          .map(_anonymousArrayToJson)
+          .toList(),
   };
 
   ArrowArray _columnFromJson(ArrowField field, Map<String, Object?> json) {
@@ -176,7 +184,22 @@ final class OwnedBatchJsonCodec {
       values,
       validity: validity,
       dictionary: dictionary,
+      nestedDictionaries: _nestedFromJson(json),
     );
+  }
+
+  List<ArrowArray> _nestedFromJson(Map<String, Object?> json) {
+    if (!json.containsKey('nestedDictionaries')) return const [];
+    final raw = json['nestedDictionaries'];
+    if (raw is! List) {
+      throw const FormatException('nestedDictionaries must be a list');
+    }
+    return raw.map((entry) {
+      if (entry is! Map) {
+        throw const FormatException('nested dictionary must be an object');
+      }
+      return _anonymousArrayFromJson(entry.cast<String, Object?>());
+    }).toList();
   }
 
   void _checkJsonLimits(Object? root) {
@@ -294,13 +317,6 @@ ArrowValue _valueFromJson(ArrowDataType type, Object? json) {
     return json.cast<String, Object?>();
   }
 
-  String string() {
-    if (json is! String) {
-      throw FormatException('Value for $type must be a string');
-    }
-    return json;
-  }
-
   switch (type) {
     case ArrowNullType():
       throw const FormatException('Null datatype cannot contain a valid value');
@@ -310,7 +326,7 @@ ArrowValue _valueFromJson(ArrowDataType type, Object? json) {
       }
       return ArrowBooleanValue(json);
     case ArrowIntegerType():
-      return ArrowIntegerValue(string());
+      return ArrowIntegerValue(_canonicalInteger(json, 'Integer value'));
     case final ArrowFloatingType floating:
       final bits = object()['floatBits'];
       if (bits is! String) {
@@ -318,14 +334,12 @@ ArrowValue _valueFromJson(ArrowDataType type, Object? json) {
       }
       return ArrowFloatingValue(
         floating.bitWidth,
-        BigInt.parse(bits, radix: 16),
+        _floatBits(bits, floating.bitWidth),
       );
     case ArrowDecimalType():
-      final unscaled = object()['unscaled'];
-      if (unscaled is! String) {
-        throw const FormatException('unscaled must be a string');
-      }
-      return ArrowDecimalValue(unscaled);
+      return ArrowDecimalValue(
+        _canonicalInteger(object()['unscaled'], 'Decimal unscaled value'),
+      );
     case ArrowUtf8Type():
       if (json is! String) {
         throw const FormatException('String value must be a string');
@@ -341,7 +355,7 @@ ArrowValue _valueFromJson(ArrowDataType type, Object? json) {
         ArrowTimestampType() ||
         ArrowDurationType() ||
         ArrowTimeType():
-      return ArrowTemporalValue(string());
+      return ArrowTemporalValue(_canonicalInteger(json, 'Temporal counter'));
     case final ArrowListType list:
       if (json is! List) {
         throw const FormatException('List value must be a list');
@@ -395,7 +409,9 @@ ArrowValue _valueFromJson(ArrowDataType type, Object? json) {
           }(),
       ]);
     case ArrowDictionaryType():
-      return ArrowDictionaryIndexValue(string());
+      return ArrowDictionaryIndexValue(
+        _canonicalInteger(json, 'Dictionary index'),
+      );
     case ArrowFixedSizeBinaryType() ||
         ArrowMapType() ||
         ArrowUnionType() ||
@@ -411,6 +427,43 @@ ArrowValue _valueFromJson(ArrowDataType type, Object? json) {
         _valueFromJson(extension.storageType, storage),
       );
   }
+}
+
+/// Longest accepted decimal integer string: a sign plus the 78 digits of the
+/// widest supported magnitude (2^256). Rejecting longer input before parsing
+/// bounds BigInt.parse, whose cost grows super-linearly with length.
+const int _maxIntegerStringLength = 79;
+
+final RegExp _canonicalIntegerPattern = RegExp(r'^-?(0|[1-9][0-9]*)$');
+final RegExp _hexPattern = RegExp(r'^[0-9a-fA-F]+$');
+
+/// Parses a canonical base-10 integer string: no whitespace, plus sign,
+/// leading zeros, radix prefix, or negative zero. Range checks against the
+/// declared datatype happen later in validateArrowValue.
+BigInt _canonicalInteger(Object? json, String what) {
+  if (json is! String) {
+    throw FormatException('$what must be a decimal string');
+  }
+  if (json.length > _maxIntegerStringLength) {
+    throw FormatException('$what exceeds $_maxIntegerStringLength characters');
+  }
+  if (_canonicalIntegerPattern.firstMatch(json)?.end != json.length ||
+      json == '-0') {
+    throw FormatException('$what must be a canonical decimal integer: $json');
+  }
+  return BigInt.parse(json);
+}
+
+/// Parses exactly bitWidth/4 hexadecimal digits of an IEEE bit pattern.
+BigInt _floatBits(String bits, int bitWidth) {
+  final digits = bitWidth ~/ 4;
+  if (bits.length != digits ||
+      _hexPattern.firstMatch(bits)?.end != bits.length) {
+    throw FormatException(
+      'floatBits for float$bitWidth must be exactly $digits hexadecimal digits',
+    );
+  }
+  return BigInt.parse(bits, radix: 16);
 }
 
 Object? _nullableToJson(ArrowDataType type, ArrowValue? value) =>
@@ -533,14 +586,10 @@ ArrowIntervalValue _intervalFromJson(
         _jsonInt(json, 'milliseconds'),
       );
     case ArrowIntervalUnit.monthDayNano:
-      final nanos = json['nanoseconds'];
-      if (nanos is! String) {
-        throw const FormatException('nanoseconds must be a string');
-      }
       return ArrowIntervalValue.monthDayNano(
         _jsonInt(json, 'months'),
         _jsonInt(json, 'days'),
-        BigInt.parse(nanos),
+        _canonicalInteger(json['nanoseconds'], 'nanoseconds'),
       );
   }
 }

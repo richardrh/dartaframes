@@ -55,6 +55,7 @@ final class RecordBatch {
           column.type,
           column.values.sublist(offset, offset + count),
           dictionary: column.dictionary,
+          nestedDictionaries: column.nestedDictionaries,
         ),
     ], rowCount: count);
   }
