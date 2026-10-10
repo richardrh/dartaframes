@@ -291,7 +291,12 @@ final class _BodyReader {
     this.limits,
     this.budget, {
     List<int> variadicCounts = const [],
+    this.codec,
   }) : _variadic = variadicCounts;
+
+  /// BodyCompression codec (0 = LZ4_FRAME, 1 = ZSTD) or null if uncompressed.
+  final int? codec;
+  int _decompressed = 0;
 
   final _ValueBudget budget;
 
@@ -324,7 +329,23 @@ final class _BodyReader {
         'Buffer [${ref.offset}, +${ref.length}) exceeds body of ${body.length} bytes',
       );
     }
-    return Uint8List.sublistView(body, ref.offset, ref.offset + ref.length);
+    final raw = Uint8List.sublistView(
+      body,
+      ref.offset,
+      ref.offset + ref.length,
+    );
+    final codec = this.codec;
+    if (codec == null || raw.isEmpty) return raw;
+    final decoded = _decodeCompressedIpcBuffer(
+      raw,
+      codec,
+      limits.maxMessageBytes - _decompressed,
+    );
+    _decompressed += decoded.length;
+    if (_decompressed > limits.maxMessageBytes) {
+      throw const FormatException('Decompressed body exceeds maxMessageBytes');
+    }
+    return decoded;
   }
 
   int variadicCount() {

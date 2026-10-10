@@ -289,9 +289,6 @@ List<List<ArrowValue?>> _decodeColumns(
   ArrowIpcLimits limits,
   _ValueBudget budget,
 ) {
-  if (batch.table(3) != null) {
-    throw UnsupportedError('Compressed IPC bodies are not supported');
-  }
   final reader = _BodyReader(
     body,
     _nodes(batch.structs(1, 16), limits),
@@ -299,6 +296,7 @@ List<List<ArrowValue?>> _decodeColumns(
     limits,
     budget,
     variadicCounts: _variadicCounts(batch, limits),
+    codec: _compressionCodec(batch),
   );
   final length = batch.i64(0, 0);
   if (length < 0 || length > limits.maxRows) {
@@ -314,6 +312,19 @@ List<List<ArrowValue?>> _decodeColumns(
     }
   }
   return columns;
+}
+
+/// Reads RecordBatch.compression (Message.fbs BodyCompression), returning
+/// the codec id, or null when the body is uncompressed.
+int? _compressionCodec(_FbTableView batch) {
+  final compression = batch.table(3);
+  if (compression == null) return null;
+  final codec = compression.u8(0, 0);
+  if (codec > 1) throw FormatException('Unknown compression codec $codec');
+  if (compression.u8(1, 0) != 0) {
+    throw const FormatException('Only BUFFER body compression is defined');
+  }
+  return codec;
 }
 
 List<_IpcNode> _nodes(_FbStructs structs, ArrowIpcLimits limits) {

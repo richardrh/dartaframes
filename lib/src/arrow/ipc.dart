@@ -9,7 +9,8 @@
 ///
 /// Scope and deliberate limits:
 /// * Little-endian only. Big-endian producers are rejected.
-/// * Body compression (LZ4/ZSTD) is rejected with [UnsupportedError].
+/// * Compressed bodies (LZ4_FRAME/ZSTD) are read when the platform helper
+///   supports the codec; writers always emit uncompressed bodies.
 /// * Dictionary-encoded fields are supported at the top level of a schema
 ///   (the logical model attaches one dictionary per [ArrowArray]). Nested
 ///   dictionaries are rejected explicitly.
@@ -23,6 +24,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 
 import 'array.dart';
+import 'ipc_compression_vm.dart'
+    if (dart.library.js_interop) 'ipc_compression_web.dart'
+    as ipc_compression;
 import 'batch.dart';
 import 'schema.dart';
 import 'type.dart';
@@ -30,6 +34,7 @@ import 'value.dart';
 
 part 'ipc_body.dart';
 part 'ipc_body_extended.dart';
+part 'ipc_compression.dart';
 part 'ipc_flatbuffers.dart';
 part 'ipc_message.dart';
 part 'ipc_schema.dart';
