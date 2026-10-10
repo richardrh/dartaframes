@@ -29,8 +29,9 @@ final class OwnedBatchJsonCodec {
       throw const FormatException('Batch JSON exceeds the source-size limit');
     }
     final value = jsonDecode(source);
-    if (value is! Map)
+    if (value is! Map) {
       throw const FormatException('Batch must be a JSON object');
+    }
     return fromJson(value.cast<String, Object?>());
   }
 
@@ -110,10 +111,11 @@ final class OwnedBatchJsonCodec {
       );
     }
     final dtype = _dtype(json);
-    if (dtype != field.type)
+    if (dtype != field.type) {
       throw FormatException(
         'Column ${field.name} datatype does not match schema',
       );
+    }
     return _arrayFromParts(dtype, json);
   }
 
@@ -122,8 +124,9 @@ final class OwnedBatchJsonCodec {
 
   ArrowDataType _dtype(Map<String, Object?> json) {
     final raw = json['dtype'];
-    if (raw is! Map)
+    if (raw is! Map) {
       throw const FormatException('Column dtype must be an object');
+    }
     return ArrowDataType.fromJson(raw.cast<String, Object?>());
   }
 
@@ -134,8 +137,9 @@ final class OwnedBatchJsonCodec {
       throw const FormatException('Column values and validity must be lists');
     }
     final validity = rawValidity.map((v) {
-      if (v is! bool)
+      if (v is! bool) {
         throw const FormatException('Validity entries must be booleans');
+      }
       return v;
     }).toList();
     if (validity.length != rawValues.length) {
@@ -146,20 +150,23 @@ final class OwnedBatchJsonCodec {
     final values = <ArrowValue?>[];
     for (var i = 0; i < rawValues.length; i++) {
       if (!validity[i]) {
-        if (rawValues[i] != null)
+        if (rawValues[i] != null) {
           throw FormatException('Invalid value at index $i must be null');
+        }
         values.add(null);
       } else {
-        if (rawValues[i] == null)
+        if (rawValues[i] == null) {
           throw FormatException('Valid value at index $i is null');
+        }
         values.add(_valueFromJson(dtype, rawValues[i]));
       }
     }
     ArrowArray? dictionary;
     final rawDictionary = json['dictionary'];
     if (rawDictionary != null) {
-      if (rawDictionary is! Map)
+      if (rawDictionary is! Map) {
         throw const FormatException('dictionary must be an object');
+      }
       dictionary = _anonymousArrayFromJson(
         rawDictionary.cast<String, Object?>(),
       );
@@ -275,14 +282,16 @@ Object _valueToJson(ArrowDataType type, ArrowValue value) {
 
 ArrowValue _valueFromJson(ArrowDataType type, Object? json) {
   Map<String, Object?> object() {
-    if (json is! Map)
+    if (json is! Map) {
       throw FormatException('Value for $type must be an object');
+    }
     return json.cast<String, Object?>();
   }
 
   String string() {
-    if (json is! String)
+    if (json is! String) {
       throw FormatException('Value for $type must be a string');
+    }
     return json;
   }
 
@@ -290,32 +299,37 @@ ArrowValue _valueFromJson(ArrowDataType type, Object? json) {
     case ArrowNullType():
       throw const FormatException('Null datatype cannot contain a valid value');
     case ArrowBooleanType():
-      if (json is! bool)
+      if (json is! bool) {
         throw const FormatException('Boolean value must be a boolean');
+      }
       return ArrowBooleanValue(json);
     case ArrowIntegerType():
       return ArrowIntegerValue(string());
     case final ArrowFloatingType floating:
       final bits = object()['floatBits'];
-      if (bits is! String)
+      if (bits is! String) {
         throw const FormatException('floatBits must be a string');
+      }
       return ArrowFloatingValue(
         floating.bitWidth,
         BigInt.parse(bits, radix: 16),
       );
     case ArrowDecimalType():
       final unscaled = object()['unscaled'];
-      if (unscaled is! String)
+      if (unscaled is! String) {
         throw const FormatException('unscaled must be a string');
+      }
       return ArrowDecimalValue(unscaled);
     case ArrowUtf8Type():
-      if (json is! String)
+      if (json is! String) {
         throw const FormatException('String value must be a string');
+      }
       return ArrowStringValue(json);
     case ArrowBinaryType():
       final encoded = object()['base64'];
-      if (encoded is! String)
+      if (encoded is! String) {
         throw const FormatException('base64 must be a string');
+      }
       return ArrowBinaryValue(base64Decode(encoded));
     case ArrowDateType() ||
         ArrowTimestampType() ||
@@ -323,8 +337,9 @@ ArrowValue _valueFromJson(ArrowDataType type, Object? json) {
         ArrowTimeType():
       return ArrowTemporalValue(string());
     case final ArrowListType list:
-      if (json is! List)
+      if (json is! List) {
         throw const FormatException('List value must be a list');
+      }
       return ArrowListValue(
         json
             .map(
@@ -334,8 +349,9 @@ ArrowValue _valueFromJson(ArrowDataType type, Object? json) {
             .toList(),
       );
     case final ArrowFixedSizeListType list:
-      if (json is! List)
+      if (json is! List) {
         throw const FormatException('Fixed list value must be a list');
+      }
       return ArrowListValue(
         json
             .map(
@@ -345,20 +361,24 @@ ArrowValue _valueFromJson(ArrowDataType type, Object? json) {
             .toList(),
       );
     case final ArrowStructType struct:
-      if (json is! List)
+      if (json is! List) {
         throw const FormatException('Struct value must be a list');
-      if (json.length != struct.fields.length)
+      }
+      if (json.length != struct.fields.length) {
         throw const FormatException('Struct field count mismatch');
+      }
       return ArrowStructValue([
         for (var i = 0; i < json.length; i++)
           () {
             final raw = json[i];
-            if (raw is! Map)
+            if (raw is! Map) {
               throw const FormatException('Struct entry must be an object');
+            }
             final entry = raw.cast<String, Object?>();
             final name = entry['name'];
-            if (name is! String)
+            if (name is! String) {
               throw const FormatException('Struct entry name must be a string');
+            }
             final rawValue = entry['value'];
             return ArrowStructEntry(
               name,
@@ -372,8 +392,9 @@ ArrowValue _valueFromJson(ArrowDataType type, Object? json) {
       return ArrowDictionaryIndexValue(string());
     case final ArrowExtensionType extension:
       final storage = object()['storage'];
-      if (storage == null)
+      if (storage == null) {
         throw const FormatException('Extension storage cannot be null');
+      }
       return ArrowExtensionValue(
         _valueFromJson(extension.storageType, storage),
       );

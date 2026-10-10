@@ -38,7 +38,9 @@ final class LazyFrame {
     if (!allowEmpty && values.isEmpty) {
       throw ArgumentError.value(expressions, field, 'must not be empty');
     }
-    for (final value in values) _runtime._requireExpr(value);
+    for (final value in values) {
+      _runtime._requireExpr(value);
+    }
     final leases = _leaseAll([_owner, ...values.map((value) => value._owner)]);
     try {
       return _runtime._adoptLazy(
@@ -156,7 +158,9 @@ final class LazyFrame {
 
   LazyGroupBy groupBy(Iterable<Expr> keys, {bool maintainOrder = false}) {
     final values = List<Expr>.unmodifiable(keys);
-    for (final value in values) _runtime._requireExpr(value);
+    for (final value in values) {
+      _runtime._requireExpr(value);
+    }
     return LazyGroupBy._(this, values, maintainOrder);
   }
 
@@ -167,7 +171,9 @@ final class LazyFrame {
   }) {
     _runtime._requireExpr(indexColumn);
     final keys = List<Expr>.unmodifiable(groupBy);
-    for (final key in keys) _runtime._requireExpr(key);
+    for (final key in keys) {
+      _runtime._requireExpr(key);
+    }
     return LazyDynamicGroupBy._(this, indexColumn, keys, options);
   }
 
@@ -178,7 +184,9 @@ final class LazyFrame {
   }) {
     _runtime._requireExpr(indexColumn);
     final keys = List<Expr>.unmodifiable(groupBy);
-    for (final key in keys) _runtime._requireExpr(key);
+    for (final key in keys) {
+      _runtime._requireExpr(key);
+    }
     return LazyRollingGroupBy._(this, indexColumn, keys, options);
   }
 
@@ -193,7 +201,9 @@ final class LazyFrame {
     _runtime._requireLazy(other);
     final left = List<Expr>.unmodifiable(leftOn);
     final right = List<Expr>.unmodifiable(rightOn);
-    for (final value in [...left, ...right]) _runtime._requireExpr(value);
+    for (final value in [...left, ...right]) {
+      _runtime._requireExpr(value);
+    }
     const modes = {
       'inner',
       'left',
@@ -204,8 +214,9 @@ final class LazyFrame {
       'anti',
       'cross',
     };
-    if (!modes.contains(how))
+    if (!modes.contains(how)) {
       throw ArgumentError.value(how, 'how', 'unsupported join mode');
+    }
     if (how == 'cross' && (left.isNotEmpty || right.isNotEmpty)) {
       throw ArgumentError('Cross joins must not specify keys');
     }
@@ -273,7 +284,9 @@ final class LazyFrame {
     _runtime._requireLazy(other);
     final left = List<Expr>.unmodifiable(leftOn);
     final right = List<Expr>.unmodifiable(rightOn);
-    for (final value in [...left, ...right]) _runtime._requireExpr(value);
+    for (final value in [...left, ...right]) {
+      _runtime._requireExpr(value);
+    }
     final how = fields['how'] as String;
     if (how == 'cross' && (left.isNotEmpty || right.isNotEmpty)) {
       throw ArgumentError('Cross joins must not specify keys');
@@ -365,7 +378,9 @@ final class LazyFrame {
     if (values.isEmpty) {
       throw ArgumentError.value(predicates, 'predicates', 'must not be empty');
     }
-    for (final value in values) _runtime._requireExpr(value);
+    for (final value in values) {
+      _runtime._requireExpr(value);
+    }
     final fields = options._toJson();
     final leases = _leaseAll([
       _owner,
@@ -412,8 +427,9 @@ final class LazyFrame {
         'strict': strict,
       });
   LazyFrame rename(Map<String, String> mapping, {bool strict = true}) {
-    if (mapping.isEmpty)
+    if (mapping.isEmpty) {
       throw ArgumentError.value(mapping, 'mapping', 'must not be empty');
+    }
     for (final entry in mapping.entries) {
       _validateName(entry.key, 'mapping key');
       _validateName(entry.value, 'mapping value');
@@ -693,8 +709,9 @@ final class LazyGroupBy {
   final bool _maintainOrder;
   LazyFrame agg(Iterable<Expr> aggregations) {
     final values = List<Expr>.unmodifiable(aggregations);
-    for (final value in [..._keys, ...values])
+    for (final value in [..._keys, ...values]) {
       _frame._runtime._requireExpr(value);
+    }
     final leases = _leaseAll([
       _frame._owner,
       ..._keys.map((x) => x._owner),
@@ -948,8 +965,9 @@ List<String> _validatedNames(Iterable<String> values, String name) {
 }
 
 List<Field> _schema(Object? raw) {
-  if (raw is! List)
+  if (raw is! List) {
     throw const FormatException('Native schema must be an array');
+  }
   return List<Field>.unmodifiable(
     raw.map((value) {
       final field = (value as Map).cast<String, Object?>();

@@ -12,8 +12,9 @@ final class ArrowField {
     this.nullable = true,
     Map<String, String> metadata = const {},
   }) : metadata = _metadata(metadata) {
-    if (name.isEmpty)
+    if (name.isEmpty) {
       throw ArgumentError.value(name, 'name', 'must not be empty');
+    }
   }
   final String name;
   final ArrowDataType type;
@@ -85,8 +86,9 @@ final class ArrowSchema {
        metadata = _metadata(metadata) {
     final names = <String>{};
     for (final field in fields) {
-      if (!names.add(field.name))
+      if (!names.add(field.name)) {
         throw ArgumentError('Duplicate schema field: ${field.name}');
+      }
     }
   }
   final List<ArrowField> fields;

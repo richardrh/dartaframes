@@ -38,19 +38,22 @@ sealed class ArrowDataType {
 
   static ArrowDataType _fromJson(Map<String, Object?> json) {
     final kind = json['kind'];
-    if (kind is! String)
+    if (kind is! String) {
       throw const FormatException('dtype.kind must be a string');
+    }
     int integer(String name) {
       final value = json[name];
-      if (value is! int)
+      if (value is! int) {
         throw FormatException('dtype.$name must be an integer');
+      }
       return value;
     }
 
     String string(String name) {
       final value = json[name];
-      if (value is! String)
+      if (value is! String) {
         throw FormatException('dtype.$name must be a string');
+      }
       return value;
     }
 
@@ -147,8 +150,9 @@ sealed class ArrowDataType {
         );
       case 'struct':
         final fields = json['fields'];
-        if (fields is! List)
+        if (fields is! List) {
           throw const FormatException('dtype.fields must be a list');
+        }
         return ArrowStructType(
           fields.indexed
               .map(
@@ -332,8 +336,9 @@ final class ArrowStructType extends ArrowDataType {
     : fields = List.unmodifiable(fields) {
     final names = <String>{};
     for (final field in fields) {
-      if (!names.add(field.name))
+      if (!names.add(field.name)) {
         throw ArgumentError('Duplicate struct field: ${field.name}');
+      }
     }
   }
   final List<ArrowField> fields;
@@ -368,8 +373,9 @@ final class ArrowDictionaryType extends ArrowDataType {
 
 final class ArrowExtensionType extends ArrowDataType {
   ArrowExtensionType(this.name, this.storageType, {this.metadata}) {
-    if (name.isEmpty)
+    if (name.isEmpty) {
       throw ArgumentError.value(name, 'name', 'must not be empty');
+    }
   }
   final String name;
   final ArrowDataType storageType;
@@ -396,10 +402,11 @@ bool _deepEquals(Object? a, Object? b) {
 }
 
 int _deepHash(Object? value) {
-  if (value is Map)
+  if (value is Map) {
     return Object.hashAllUnordered(
       value.entries.map((e) => Object.hash(e.key, _deepHash(e.value))),
     );
+  }
   if (value is List) return Object.hashAll(value.map(_deepHash));
   return value.hashCode;
 }

@@ -145,8 +145,9 @@ Future<bool> _validFile(
   String expectedHash,
 ) async {
   try {
-    if (!await file.exists() || await file.length() != expectedSize)
+    if (!await file.exists() || await file.length() != expectedSize) {
       return false;
+    }
     final digest = await sha256.bind(file.openRead()).first;
     return digest.toString() == expectedHash;
   } on FileSystemException {
@@ -161,8 +162,9 @@ Future<void> downloadNativeAsset(
   File destination,
   int maximumBytes,
 ) async {
-  if (maximumBytes <= 0)
+  if (maximumBytes <= 0) {
     throw ArgumentError.value(maximumBytes, 'maximumBytes');
+  }
   final deadline = DateTime.now().add(_totalTimeout);
   var current = uri;
   for (var redirects = 0; redirects <= _maximumRedirects; redirects++) {
