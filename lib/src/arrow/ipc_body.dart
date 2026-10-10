@@ -267,14 +267,33 @@ void _writeStruct(
 
 // ----------------------------------------------------------------- reader --
 
+/// Running total of decoded value slots, shared across one table read.
+final class _ValueBudget {
+  _ValueBudget(this.limit);
+  final int limit;
+  int used = 0;
+
+  void charge(int count) {
+    used += count;
+    if (used > limit) {
+      throw FormatException(
+        'Decoded value count exceeds ArrowIpcLimits.maxValues ($limit)',
+      );
+    }
+  }
+}
+
 final class _BodyReader {
   _BodyReader(
     this.body,
     this.nodes,
     this.buffers,
-    this.limits, {
+    this.limits,
+    this.budget, {
     List<int> variadicCounts = const [],
   }) : _variadic = variadicCounts;
+
+  final _ValueBudget budget;
 
   final Uint8List body;
   final List<_IpcNode> nodes;
@@ -361,6 +380,7 @@ _IpcNode _checkedNode(_BodyReader r) {
   if (n.nullCount < 0 || n.nullCount > n.length) {
     throw FormatException('Invalid null count ${n.nullCount}');
   }
+  r.budget.charge(n.length);
   return n;
 }
 

@@ -170,6 +170,7 @@ final class _ReadState {
   final Map<int, int> _fieldForId = {};
   final Map<int, ArrowArray> _dictionaries = {};
   final List<RecordBatch> _batches = [];
+  late final _ValueBudget _budget = _ValueBudget(limits.maxValues);
   int _dictionaryCount = 0;
 
   void _bindDictionaryIds(_IpcSchema ipc) {
@@ -218,9 +219,13 @@ final class _ReadState {
     if (data == null) {
       throw const FormatException('DictionaryBatch has no data');
     }
-    final values = _decodeColumns(data, message.body, [
-      valueType,
-    ], limits).single;
+    final values = _decodeColumns(
+      data,
+      message.body,
+      [valueType],
+      limits,
+      _budget,
+    ).single;
     final isDelta = message.header.boolean(2, false);
     _storeDictionary(id, valueType, values, isDelta, allowReplacement);
   }
@@ -247,7 +252,13 @@ final class _ReadState {
       throw const FormatException('Too many record batches');
     }
     final types = [for (final f in schema.fields) f.type];
-    final columns = _decodeColumns(message.header, message.body, types, limits);
+    final columns = _decodeColumns(
+      message.header,
+      message.body,
+      types,
+      limits,
+      _budget,
+    );
     final rows = message.header.i64(0, 0);
     _batches.add(
       RecordBatch(schema, [
@@ -276,6 +287,7 @@ List<List<ArrowValue?>> _decodeColumns(
   Uint8List body,
   List<ArrowDataType> types,
   ArrowIpcLimits limits,
+  _ValueBudget budget,
 ) {
   if (batch.table(3) != null) {
     throw UnsupportedError('Compressed IPC bodies are not supported');
@@ -285,9 +297,13 @@ List<List<ArrowValue?>> _decodeColumns(
     _nodes(batch.structs(1, 16), limits),
     _buffers(batch.structs(2, 16), limits),
     limits,
+    budget,
     variadicCounts: _variadicCounts(batch, limits),
   );
   final length = batch.i64(0, 0);
+  if (length < 0 || length > limits.maxRows) {
+    throw FormatException('Batch length $length exceeds limits');
+  }
   final columns = [for (final type in types) _readValues(reader, type)];
   reader.finish();
   for (final column in columns) {

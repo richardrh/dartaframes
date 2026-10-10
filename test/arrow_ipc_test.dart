@@ -206,6 +206,17 @@ void _expectSameTable(
   }
 }
 
+int _indexOf(Uint8List haystack, Uint8List needle) {
+  outer:
+  for (var i = 0; i + needle.length <= haystack.length; i++) {
+    for (var j = 0; j < needle.length; j++) {
+      if (haystack[i + j] != needle[j]) continue outer;
+    }
+    return i;
+  }
+  return -1;
+}
+
 void main() {
   group('Arrow IPC round trip', () {
     test('stream preserves all core types', () {
@@ -377,6 +388,47 @@ void main() {
         }
       }
     });
+
+    test(
+      'Null batch claiming a billion rows is rejected without allocating',
+      () {
+        final schema = ArrowSchema([ArrowField('n', const ArrowNullType())]);
+        final batch = RecordBatch(schema, [
+          _col(const ArrowNullType(), [null]),
+        ]);
+        final bytes = ArrowIpcStreamWriter(
+          schema: schema,
+          batches: [batch],
+        ).write();
+        // FieldNode struct {length: 1, null_count: 1}, patched to 2^30 rows.
+        final node = Uint8List(16)
+          ..[0] = 1
+          ..[8] = 1;
+        final at = _indexOf(bytes, node);
+        expect(at, greaterThan(0));
+        final evil = Uint8List.fromList(bytes);
+        ByteData.sublistView(evil)
+          ..setUint32(at, 1 << 30, Endian.little)
+          ..setUint32(at + 8, 1 << 30, Endian.little);
+        expect(
+          () => ArrowIpcStreamReader(evil).readTable(),
+          throwsFormatException,
+        );
+        expect(
+          () => ArrowIpcStreamReader(
+            evil,
+            limits: const ArrowIpcLimits(maxRows: 1 << 40),
+          ).readTable(),
+          throwsA(
+            isA<FormatException>().having(
+              (e) => e.message,
+              'message',
+              contains('maxValues'),
+            ),
+          ),
+        );
+      },
+    );
 
     test('limits bound depth and batches', () {
       expect(

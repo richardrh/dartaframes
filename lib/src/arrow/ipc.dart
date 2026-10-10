@@ -35,13 +35,17 @@ part 'ipc_message.dart';
 part 'ipc_schema.dart';
 
 /// Resource limits applied while decoding untrusted IPC input.
+///
+/// Defaults are conservative; trusted callers handling larger data should
+/// pass raised limits explicitly.
 final class ArrowIpcLimits {
   const ArrowIpcLimits({
     this.maxDepth = 64,
     this.maxFields = 10000,
-    this.maxRows = 1 << 31,
-    this.maxBuffers = 1 << 20,
-    this.maxMessageBytes = 1 << 31,
+    this.maxRows = 1 << 20,
+    this.maxValues = 4 << 20,
+    this.maxBuffers = 1 << 16,
+    this.maxMessageBytes = 64 << 20,
     this.maxDictionaries = 1024,
     this.maxBatches = 1 << 20,
   });
@@ -54,6 +58,11 @@ final class ArrowIpcLimits {
 
   /// Maximum length of any single array node.
   final int maxRows;
+
+  /// Maximum total of all field node lengths decoded for one table. Every
+  /// decoded slot materialises a Dart object, so this bounds memory even for
+  /// layouts (such as Null) whose wire size is independent of length.
+  final int maxValues;
 
   /// Maximum number of field nodes or buffers in one message.
   final int maxBuffers;
