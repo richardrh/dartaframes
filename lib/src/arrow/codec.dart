@@ -270,6 +270,12 @@ Object _valueToJson(ArrowDataType type, ArrowValue value) {
       ];
     case ArrowDictionaryType():
       return (value as ArrowDictionaryIndexValue).index.toString();
+    case ArrowFixedSizeBinaryType() ||
+        ArrowMapType() ||
+        ArrowUnionType() ||
+        ArrowIntervalType() ||
+        ArrowRunEndEncodedType():
+      return _extendedValueToJson(type, value);
     case final ArrowExtensionType extension:
       return {
         'storage': _valueToJson(
@@ -390,6 +396,12 @@ ArrowValue _valueFromJson(ArrowDataType type, Object? json) {
       ]);
     case ArrowDictionaryType():
       return ArrowDictionaryIndexValue(string());
+    case ArrowFixedSizeBinaryType() ||
+        ArrowMapType() ||
+        ArrowUnionType() ||
+        ArrowIntervalType() ||
+        ArrowRunEndEncodedType():
+      return _extendedValueFromJson(type, json);
     case final ArrowExtensionType extension:
       final storage = object()['storage'];
       if (storage == null) {
@@ -397,6 +409,138 @@ ArrowValue _valueFromJson(ArrowDataType type, Object? json) {
       }
       return ArrowExtensionValue(
         _valueFromJson(extension.storageType, storage),
+      );
+  }
+}
+
+Object? _nullableToJson(ArrowDataType type, ArrowValue? value) =>
+    value == null ? null : _valueToJson(type, value);
+
+ArrowValue? _nullableFromJson(ArrowDataType type, Object? json) =>
+    json == null ? null : _valueFromJson(type, json);
+
+Object _extendedValueToJson(ArrowDataType type, ArrowValue value) {
+  switch (type) {
+    case ArrowFixedSizeBinaryType():
+      return {'base64': base64Encode((value as ArrowBinaryValue).bytes)};
+    case final ArrowMapType map:
+      return [
+        for (final entry in (value as ArrowMapValue).entries)
+          {
+            'key': _valueToJson(map.keyField.type, entry.key),
+            'value': _nullableToJson(map.valueField.type, entry.value),
+          },
+      ];
+    case final ArrowUnionType union:
+      final tagged = value as ArrowUnionValue;
+      return {
+        'typeId': tagged.typeId,
+        'value': _nullableToJson(
+          union.fieldForTypeId(tagged.typeId)!.type,
+          tagged.value,
+        ),
+      };
+    case ArrowIntervalType():
+      return _intervalToJson(value as ArrowIntervalValue);
+    case final ArrowRunEndEncodedType ree:
+      return _valueToJson(ree.valuesField.type, value);
+    default:
+      throw StateError('Unhandled datatype $type');
+  }
+}
+
+Map<String, Object?> _intervalToJson(ArrowIntervalValue value) =>
+    switch (value.unit) {
+      ArrowIntervalUnit.yearMonth => {'months': value.months},
+      ArrowIntervalUnit.dayTime => {
+        'days': value.days,
+        'milliseconds': value.milliseconds,
+      },
+      ArrowIntervalUnit.monthDayNano => {
+        'months': value.months,
+        'days': value.days,
+        'nanoseconds': value.nanoseconds.toString(),
+      },
+    };
+
+Map<String, Object?> _jsonObject(Object? json, String what) {
+  if (json is! Map) throw FormatException('$what must be an object');
+  return json.cast<String, Object?>();
+}
+
+int _jsonInt(Map<String, Object?> json, String name) {
+  final value = json[name];
+  if (value is! int) throw FormatException('$name must be an integer');
+  return value;
+}
+
+ArrowValue _extendedValueFromJson(ArrowDataType type, Object? json) {
+  switch (type) {
+    case ArrowFixedSizeBinaryType():
+      final encoded = _jsonObject(json, 'Binary value')['base64'];
+      if (encoded is! String) {
+        throw const FormatException('base64 must be a string');
+      }
+      return ArrowBinaryValue(base64Decode(encoded));
+    case final ArrowMapType map:
+      if (json is! List) {
+        throw const FormatException('Map value must be a list');
+      }
+      return ArrowMapValue([
+        for (final raw in json)
+          () {
+            final entry = _jsonObject(raw, 'Map entry');
+            final key = entry['key'];
+            if (key == null) {
+              throw const FormatException('Map keys cannot be null');
+            }
+            return ArrowMapEntry(
+              _valueFromJson(map.keyField.type, key),
+              _nullableFromJson(map.valueField.type, entry['value']),
+            );
+          }(),
+      ]);
+    case final ArrowUnionType union:
+      final tagged = _jsonObject(json, 'Union value');
+      final typeId = _jsonInt(tagged, 'typeId');
+      final field = union.fieldForTypeId(typeId);
+      if (field == null) {
+        throw FormatException('Undeclared union type id $typeId');
+      }
+      return ArrowUnionValue(
+        typeId,
+        _nullableFromJson(field.type, tagged['value']),
+      );
+    case final ArrowIntervalType interval:
+      return _intervalFromJson(interval.unit, _jsonObject(json, 'Interval'));
+    case final ArrowRunEndEncodedType ree:
+      return _valueFromJson(ree.valuesField.type, json);
+    default:
+      throw StateError('Unhandled datatype $type');
+  }
+}
+
+ArrowIntervalValue _intervalFromJson(
+  ArrowIntervalUnit unit,
+  Map<String, Object?> json,
+) {
+  switch (unit) {
+    case ArrowIntervalUnit.yearMonth:
+      return ArrowIntervalValue.yearMonth(_jsonInt(json, 'months'));
+    case ArrowIntervalUnit.dayTime:
+      return ArrowIntervalValue.dayTime(
+        _jsonInt(json, 'days'),
+        _jsonInt(json, 'milliseconds'),
+      );
+    case ArrowIntervalUnit.monthDayNano:
+      final nanos = json['nanoseconds'];
+      if (nanos is! String) {
+        throw const FormatException('nanoseconds must be a string');
+      }
+      return ArrowIntervalValue.monthDayNano(
+        _jsonInt(json, 'months'),
+        _jsonInt(json, 'days'),
+        BigInt.parse(nanos),
       );
   }
 }

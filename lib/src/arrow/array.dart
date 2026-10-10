@@ -22,6 +22,11 @@ final class ArrowArray {
       final value = values[i];
       if (value != null) validateArrowValue(type, value, path: 'values[$i]');
     }
+    if (type is ArrowUnionType && this.validity.contains(false)) {
+      throw ArgumentError(
+        'Union arrays have no top-level nulls; use ArrowUnionValue(id, null)',
+      );
+    }
     if (type case final ArrowDictionaryType dictionaryType) {
       final dictionary = this.dictionary;
       if (dictionary == null) {
@@ -47,8 +52,45 @@ final class ArrowArray {
     }
   }
 
+  /// Builds a run-end encoded array from its physical encoding.
+  ///
+  /// [runEnds] must be strictly increasing positive integers that fit the
+  /// declared run-end width; the last run end is the logical length.
+  /// [runValues] has one entry per run (null for a null run).
+  factory ArrowArray.runEndEncoded(
+    ArrowRunEndEncodedType type,
+    List<int> runEnds,
+    List<ArrowValue?> runValues,
+  ) => ArrowArray(type, expandRunEnds(type, runEnds, runValues));
+
   final ArrowDataType type;
   final List<ArrowValue?> values;
+
+  /// Run ends of the canonical (maximally merged) run-end encoding.
+  ///
+  /// Only valid for [ArrowRunEndEncodedType] arrays.
+  List<int> get runEnds => _runs().$1;
+
+  /// Run values matching [runEnds].
+  List<ArrowValue?> get runValues => _runs().$2;
+
+  (List<int>, List<ArrowValue?>) _runs() {
+    if (type is! ArrowRunEndEncodedType) {
+      throw StateError('Array is not run-end encoded');
+    }
+    final ends = <int>[];
+    final runs = <ArrowValue?>[];
+    for (var i = 0; i < values.length; i++) {
+      if (runs.isNotEmpty && runs.last == values[i]) {
+        ends[ends.length - 1] = i + 1;
+      } else {
+        ends.add(i + 1);
+        runs.add(values[i]);
+      }
+    }
+    return (List.unmodifiable(ends), List.unmodifiable(runs));
+  }
+
   final List<bool> validity;
   final ArrowArray? dictionary;
   int get length => values.length;
@@ -108,6 +150,7 @@ void validateArrowValue(
           '$path unscaled decimal has $digits digits; precision is ${decimal.precision}',
         );
       }
+      _checkSignedWidth(value.unscaled, decimal.bitWidth, path);
     case ArrowUtf8Type():
       if (value is! ArrowStringValue) mismatch();
     case ArrowBinaryType():
@@ -187,6 +230,12 @@ void validateArrowValue(
         ArrowIntegerValue(value.index),
         path: path,
       );
+    case ArrowFixedSizeBinaryType() ||
+        ArrowMapType() ||
+        ArrowUnionType() ||
+        ArrowIntervalType() ||
+        ArrowRunEndEncodedType():
+      _validateExtendedValue(type, value, path, mismatch);
     case final ArrowExtensionType extension:
       if (value is! ArrowExtensionValue) mismatch();
       validateArrowValue(
@@ -212,5 +261,88 @@ void _validateChildren(
     } else {
       validateArrowValue(field.type, child, path: '$path[$i]');
     }
+  }
+}
+
+/// Expands a run-end encoding to logical rows, validating run ends.
+List<ArrowValue?> expandRunEnds(
+  ArrowRunEndEncodedType type,
+  List<int> runEnds,
+  List<ArrowValue?> runValues,
+) {
+  if (runEnds.length != runValues.length) {
+    throw ArgumentError('runEnds and runValues lengths differ');
+  }
+  final width = (type.runEndsField.type as ArrowIntegerType).bitWidth;
+  final maximum = width >= 64 ? null : (1 << (width - 1)) - 1;
+  final rows = <ArrowValue?>[];
+  var previous = 0;
+  for (var i = 0; i < runEnds.length; i++) {
+    final end = runEnds[i];
+    if (end <= previous) {
+      throw ArgumentError('runEnds[$i]=$end must exceed $previous');
+    }
+    if (maximum != null && end > maximum) {
+      throw RangeError('runEnds[$i]=$end does not fit int$width');
+    }
+    final value = runValues[i];
+    if (value == null && !type.valuesField.nullable) {
+      throw ArgumentError('runValues[$i] is not nullable');
+    }
+    rows.addAll(List.filled(end - previous, value));
+    previous = end;
+  }
+  return rows;
+}
+
+void _checkSignedWidth(BigInt value, int width, String path) {
+  final limit = BigInt.one << (width - 1);
+  if (value < -limit || value >= limit) {
+    throw RangeError('$path does not fit a $width-bit signed integer');
+  }
+}
+
+void _validateExtendedValue(
+  ArrowDataType type,
+  ArrowValue value,
+  String path,
+  Never Function() mismatch,
+) {
+  switch (type) {
+    case final ArrowFixedSizeBinaryType binary:
+      if (value is! ArrowBinaryValue) mismatch();
+      if (value.bytes.length != binary.byteWidth) {
+        throw ArgumentError(
+          '$path has ${value.bytes.length} bytes; expected ${binary.byteWidth}',
+        );
+      }
+    case final ArrowMapType map:
+      if (value is! ArrowMapValue) mismatch();
+      _validateMap(map, value, path);
+    case final ArrowUnionType union:
+      if (value is! ArrowUnionValue) mismatch();
+      final field = union.fieldForTypeId(value.typeId);
+      if (field == null) {
+        throw ArgumentError(
+          '$path has undeclared union type id ${value.typeId}',
+        );
+      }
+      _validateChildren(field, [value.value], '$path.${field.name}');
+    case final ArrowIntervalType interval:
+      if (value is! ArrowIntervalValue || value.unit != interval.unit) {
+        mismatch();
+      }
+    case final ArrowRunEndEncodedType ree:
+      _validateChildren(ree.valuesField, [value], path);
+    default:
+      mismatch();
+  }
+}
+
+void _validateMap(ArrowMapType map, ArrowMapValue value, String path) {
+  for (var i = 0; i < value.entries.length; i++) {
+    final entry = value.entries[i];
+    validateArrowValue(map.keyField.type, entry.key, path: '$path[$i].key');
+    _validateChildren(map.valueField, [entry.value], '$path[$i].value');
   }
 }
