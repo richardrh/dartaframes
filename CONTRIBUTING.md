@@ -5,10 +5,16 @@ change, open an issue so its scope and ownership semantics can be agreed.
 
 By participating, you agree to the [Code of Conduct](CODE_OF_CONDUCT.md).
 
-## Binding-only scope
+## Scope
 
-Expose upstream Polars behavior and the Arrow conversion needed for FFI.
-Do not implement query kernels, rewrite SQL, emulate unsupported operations,
+The standalone Arrow core may implement standard schemas, arrays, validation
+and IPC interoperability in pure Dart. Keep its imports independent of Polars,
+FFI, native hooks and platform-only libraries. Verify wire-format changes
+against an independent Arrow implementation, not only local round-trips.
+Standard Arrow support does not automatically imply native Polars support.
+
+For the Polars binding, expose upstream Polars behavior and the Arrow conversion
+needed for FFI. Do not implement query kernels, rewrite SQL, emulate unsupported operations,
 or add workbook/database adapters with independent inference or coercion rules.
 Keep ownership, error translation, and FFI boundary validation in the binding.
 Missing upstream functionality remains unsupported rather than being emulated.

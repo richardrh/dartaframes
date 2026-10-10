@@ -6,13 +6,16 @@ Map<String, String> _metadata(Map<String, String> value) =>
     UnmodifiableMapView(Map<String, String>.of(value));
 
 final class ArrowField {
+  /// Creates a field. Set [allowEmptyName] for unnamed standard Arrow fields.
+  /// The default retains the stricter binding-oriented constructor contract.
   ArrowField(
     this.name,
     this.type, {
     this.nullable = true,
     Map<String, String> metadata = const {},
+    bool allowEmptyName = false,
   }) : metadata = _metadata(metadata) {
-    if (name.isEmpty) {
+    if (name.isEmpty && !allowEmptyName) {
       throw ArgumentError.value(name, 'name', 'must not be empty');
     }
   }
@@ -45,6 +48,7 @@ final class ArrowField {
         name,
         ArrowDataType.fromJson(_stringObjectMap(dtype, 'field.dtype')),
         nullable: nullable as bool? ?? true,
+        allowEmptyName: true,
         metadata: _metadataFromJson(
           json['metadata'],
           'field.metadata',
@@ -79,14 +83,17 @@ final class ArrowField {
 }
 
 final class ArrowSchema {
+  /// Creates a schema. Standard IPC may contain duplicate names, addressed by
+  /// column position; set [allowDuplicateNames] to retain those schemas.
   ArrowSchema(
     List<ArrowField> fields, {
     Map<String, String> metadata = const {},
+    bool allowDuplicateNames = false,
   }) : fields = List.unmodifiable(fields),
        metadata = _metadata(metadata) {
     final names = <String>{};
     for (final field in fields) {
-      if (!names.add(field.name)) {
+      if (!names.add(field.name) && !allowDuplicateNames) {
         throw ArgumentError('Duplicate schema field: ${field.name}');
       }
     }
@@ -113,6 +120,7 @@ final class ArrowSchema {
               ),
             )
             .toList(),
+        allowDuplicateNames: true,
         metadata: _metadataFromJson(
           json['metadata'],
           'schema.metadata',
