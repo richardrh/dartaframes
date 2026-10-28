@@ -17,7 +17,17 @@ enum ArrowTimeUnit {
 
 enum ArrowDateUnit { day, millisecond }
 
-enum ArrowOffsetWidth { normal, large }
+/// Physical layout family for variable-length string, binary, and list data.
+///
+/// [normal] uses 32-bit offsets, [large] uses 64-bit offsets, and [view]
+/// selects the Arrow `Utf8View`/`BinaryView` layouts (strings and binary only).
+enum ArrowOffsetWidth { normal, large, view }
+
+/// Arrow union physical layout.
+enum ArrowUnionMode { sparse, dense }
+
+/// Arrow interval unit, as in `IntervalUnit` from Schema.fbs.
+enum ArrowIntervalUnit { yearMonth, dayTime, monthDayNano }
 
 sealed class ArrowDataType {
   const ArrowDataType();
@@ -113,7 +123,7 @@ sealed class ArrowDataType {
       case 'float64':
         return ArrowFloatingType(64);
       case 'decimal':
-        return ArrowDecimalType(integer('precision'), integer('scale'));
+        return _decimalFromJson(json, integer);
       case 'string':
       case 'utf8':
         return const ArrowUtf8Type();
@@ -154,6 +164,7 @@ sealed class ArrowDataType {
           throw const FormatException('dtype.fields must be a list');
         }
         return ArrowStructType(
+          allowDuplicateNames: true,
           fields.indexed
               .map(
                 (e) => ArrowField.fromJson(
@@ -174,6 +185,98 @@ sealed class ArrowDataType {
           ArrowDataType.fromJson(object('storageType')),
           metadata: optionalString('metadata'),
         );
+      default:
+        return _extendedFromJson(kind, json, integer, string, object, boolean);
+    }
+  }
+
+  static ArrowDecimalType _decimalFromJson(
+    Map<String, Object?> json,
+    int Function(String) integer,
+  ) {
+    final bitWidth = json['bitWidth'];
+    if (bitWidth != null && bitWidth is! int) {
+      throw const FormatException('dtype.bitWidth must be an integer');
+    }
+    return ArrowDecimalType(
+      integer('precision'),
+      integer('scale'),
+      bitWidth: (bitWidth as int?) ?? 128,
+    );
+  }
+
+  static ArrowDataType _extendedFromJson(
+    String kind,
+    Map<String, Object?> json,
+    int Function(String) integer,
+    String Function(String) string,
+    Map<String, Object?> Function(String) object,
+    bool Function(String, bool) boolean,
+  ) {
+    ArrowField field(String name) => ArrowField.fromJson(object(name));
+    switch (kind) {
+      case 'largeList':
+        return ArrowListType(
+          field('field'),
+          offsetWidth: ArrowOffsetWidth.large,
+        );
+      case 'listView':
+        return ArrowListType(field('field'), view: true);
+      case 'largeListView':
+        return ArrowListType(
+          field('field'),
+          offsetWidth: ArrowOffsetWidth.large,
+          view: true,
+        );
+      case 'stringView':
+      case 'utf8View':
+        return const ArrowUtf8Type(ArrowOffsetWidth.view);
+      case 'binaryView':
+        return const ArrowBinaryType(ArrowOffsetWidth.view);
+      case 'fixedSizeBinary':
+        return ArrowFixedSizeBinaryType(integer('byteWidth'));
+      case 'map':
+        return ArrowMapType(
+          field('key'),
+          field('value'),
+          keysSorted: boolean('keysSorted', false),
+          entriesName: json.containsKey('entriesName')
+              ? string('entriesName')
+              : 'entries',
+          entriesMetadata: _stringMap(json['entriesMetadata']),
+          allowDuplicateNames: true,
+        );
+      case 'union':
+        final fields = json['fields'];
+        final ids = json['typeIds'];
+        if (fields is! List) {
+          throw const FormatException('dtype.fields must be a list');
+        }
+        if (ids is! List || ids.any((id) => id is! int)) {
+          throw const FormatException('dtype.typeIds must be integers');
+        }
+        return ArrowUnionType(
+          [
+            for (final (i, f) in fields.indexed)
+              ArrowField.fromJson(_stringObjectMap(f, 'dtype.fields[$i]')),
+          ],
+          mode: switch (string('mode')) {
+            'sparse' => ArrowUnionMode.sparse,
+            'dense' => ArrowUnionMode.dense,
+            final mode => throw FormatException('Unknown union mode: $mode'),
+          },
+          typeIds: ids.cast<int>(),
+        );
+      case 'interval':
+        final unit = string('unit');
+        return ArrowIntervalType(
+          ArrowIntervalUnit.values.firstWhere(
+            (u) => u.name == unit,
+            orElse: () => throw FormatException('Unknown interval unit: $unit'),
+          ),
+        );
+      case 'runEndEncoded':
+        return ArrowRunEndEncodedType(field('runEnds'), field('values'));
       default:
         throw FormatException('Unknown Arrow datatype kind: $kind');
     }
@@ -238,21 +341,44 @@ final class ArrowFloatingType extends ArrowDataType {
 }
 
 final class ArrowDecimalType extends ArrowDataType {
-  ArrowDecimalType(this.precision, this.scale) {
-    if (precision < 1 || precision > 38) {
-      throw RangeError.range(precision, 1, 38, 'precision');
+  /// Creates a decimal of [bitWidth] 32, 64, 128 (default), or 256 bits.
+  ///
+  /// Maximum precision is 9, 18, 38, or 76 respectively. [scale] may be
+  /// any signed 32-bit integer, as Arrow permits: negative scales and scales
+  /// greater than [precision] are valid (value = unscaled * 10^-scale).
+  /// This is a deliberate expansion over earlier releases that required
+  /// `0 <= scale <= precision`. Consumers such as the Polars native boundary
+  /// that do not support these scales or non-128-bit widths must reject them.
+  ArrowDecimalType(this.precision, this.scale, {this.bitWidth = 128}) {
+    final maxPrecision = switch (bitWidth) {
+      32 => 9,
+      64 => 18,
+      128 => 38,
+      256 => 76,
+      _ => throw ArgumentError.value(
+        bitWidth,
+        'bitWidth',
+        'must be 32, 64, 128, or 256',
+      ),
+    };
+    if (precision < 1 || precision > maxPrecision) {
+      throw RangeError.range(precision, 1, maxPrecision, 'precision');
     }
-    if (scale < 0 || scale > precision) {
-      throw RangeError.range(scale, 0, precision, 'scale');
+    if (scale < -0x80000000 || scale > 0x7fffffff) {
+      throw RangeError.range(scale, -0x80000000, 0x7fffffff, 'scale');
     }
   }
   final int precision;
   final int scale;
+
+  /// Storage width in bits.
+  final int bitWidth;
   @override
   Map<String, Object?> toJson() => {
     'kind': 'decimal',
     'precision': precision,
     'scale': scale,
+    if (bitWidth != 128) 'bitWidth': bitWidth,
   };
 }
 
@@ -261,7 +387,11 @@ final class ArrowUtf8Type extends ArrowDataType {
   final ArrowOffsetWidth offsetWidth;
   @override
   Map<String, Object?> toJson() => {
-    'kind': offsetWidth == ArrowOffsetWidth.large ? 'largeString' : 'string',
+    'kind': switch (offsetWidth) {
+      ArrowOffsetWidth.normal => 'string',
+      ArrowOffsetWidth.large => 'largeString',
+      ArrowOffsetWidth.view => 'stringView',
+    },
   };
 }
 
@@ -270,7 +400,26 @@ final class ArrowBinaryType extends ArrowDataType {
   final ArrowOffsetWidth offsetWidth;
   @override
   Map<String, Object?> toJson() => {
-    'kind': offsetWidth == ArrowOffsetWidth.large ? 'largeBinary' : 'binary',
+    'kind': switch (offsetWidth) {
+      ArrowOffsetWidth.normal => 'binary',
+      ArrowOffsetWidth.large => 'largeBinary',
+      ArrowOffsetWidth.view => 'binaryView',
+    },
+  };
+}
+
+/// Fixed-width binary: every value has exactly [byteWidth] bytes.
+final class ArrowFixedSizeBinaryType extends ArrowDataType {
+  ArrowFixedSizeBinaryType(this.byteWidth) {
+    if (byteWidth < 0) {
+      throw RangeError.value(byteWidth, 'byteWidth', 'must be non-negative');
+    }
+  }
+  final int byteWidth;
+  @override
+  Map<String, Object?> toJson() => {
+    'kind': 'fixedSizeBinary',
+    'byteWidth': byteWidth,
   };
 }
 
@@ -311,10 +460,34 @@ final class ArrowTimeType extends ArrowDataType {
 }
 
 final class ArrowListType extends ArrowDataType {
-  ArrowListType(this.field);
+  /// Variable-length list. [offsetWidth] selects `List` (normal) or
+  /// `LargeList` (large); [view] selects the `ListView` layouts.
+  ArrowListType(
+    this.field, {
+    this.offsetWidth = ArrowOffsetWidth.normal,
+    this.view = false,
+  }) {
+    if (offsetWidth == ArrowOffsetWidth.view) {
+      throw ArgumentError.value(
+        offsetWidth,
+        'offsetWidth',
+        'use view: true for list views',
+      );
+    }
+  }
   final ArrowField field;
+  final ArrowOffsetWidth offsetWidth;
+  final bool view;
   @override
-  Map<String, Object?> toJson() => {'kind': 'list', 'field': field.toJson()};
+  Map<String, Object?> toJson() => {
+    'kind': switch ((offsetWidth == ArrowOffsetWidth.large, view)) {
+      (false, false) => 'list',
+      (true, false) => 'largeList',
+      (false, true) => 'listView',
+      (true, true) => 'largeListView',
+    },
+    'field': field.toJson(),
+  };
 }
 
 final class ArrowFixedSizeListType extends ArrowDataType {
@@ -332,8 +505,12 @@ final class ArrowFixedSizeListType extends ArrowDataType {
 }
 
 final class ArrowStructType extends ArrowDataType {
-  ArrowStructType(List<ArrowField> fields)
+  /// Creates a struct. Duplicate child names are rejected unless
+  /// [allowDuplicateNames] is true; Arrow itself permits them, so decoders of
+  /// standard data (JSON, IPC) pass true. The flag is not serialized.
+  ArrowStructType(List<ArrowField> fields, {bool allowDuplicateNames = false})
     : fields = List.unmodifiable(fields) {
+    if (allowDuplicateNames) return;
     final names = <String>{};
     for (final field in fields) {
       if (!names.add(field.name)) {
@@ -389,6 +566,132 @@ final class ArrowExtensionType extends ArrowDataType {
   };
 }
 
+/// Arrow `Map`: a list of non-null `entries` structs of `<key, value>`.
+///
+/// The key field must be non-nullable. Entry order is preserved; [keysSorted]
+/// only records the producer's claim, as in Schema.fbs.
+final class ArrowMapType extends ArrowDataType {
+  ArrowMapType(
+    this.keyField,
+    this.valueField, {
+    this.keysSorted = false,
+    this.entriesName = 'entries',
+    Map<String, String> entriesMetadata = const {},
+    this.allowDuplicateNames = false,
+  }) : entriesMetadata = Map.unmodifiable(entriesMetadata) {
+    if (keyField.nullable) {
+      throw ArgumentError.value(keyField, 'keyField', 'must be non-nullable');
+    }
+    if (!allowDuplicateNames && keyField.name == valueField.name) {
+      throw ArgumentError('Map key and value fields need distinct names');
+    }
+  }
+  final ArrowField keyField;
+  final ArrowField valueField;
+  final bool keysSorted;
+  final String entriesName;
+
+  /// Whether key and value fields may share a name (valid Arrow; readers of
+  /// standard data pass true). Not serialized.
+  final bool allowDuplicateNames;
+
+  /// Metadata of the physical entries child field, preserved for fidelity.
+  final Map<String, String> entriesMetadata;
+
+  /// The physical child field: a non-null struct of key and value.
+  ArrowField get entriesField => ArrowField(
+    entriesName,
+    ArrowStructType([
+      keyField,
+      valueField,
+    ], allowDuplicateNames: allowDuplicateNames),
+    nullable: false,
+    metadata: entriesMetadata,
+  );
+  @override
+  Map<String, Object?> toJson() => {
+    'kind': 'map',
+    'key': keyField.toJson(),
+    'value': valueField.toJson(),
+    'keysSorted': keysSorted,
+    if (entriesName != 'entries') 'entriesName': entriesName,
+    if (entriesMetadata.isNotEmpty) 'entriesMetadata': entriesMetadata,
+  };
+}
+
+/// Arrow sparse or dense union. Each child has a type id (default its index).
+final class ArrowUnionType extends ArrowDataType {
+  ArrowUnionType(
+    List<ArrowField> fields, {
+    this.mode = ArrowUnionMode.sparse,
+    List<int>? typeIds,
+  }) : fields = List.unmodifiable(fields),
+       typeIds = List.unmodifiable(
+         typeIds ?? List.generate(fields.length, (i) => i),
+       ) {
+    if (this.typeIds.length != fields.length) {
+      throw ArgumentError('Union typeIds length must match field count');
+    }
+    final seen = <int>{};
+    for (final id in this.typeIds) {
+      if (id < 0 || id > 127) throw RangeError.range(id, 0, 127, 'typeId');
+      if (!seen.add(id)) throw ArgumentError('Duplicate union type id: $id');
+    }
+  }
+  final List<ArrowField> fields;
+  final ArrowUnionMode mode;
+  final List<int> typeIds;
+
+  /// Child field for [typeId], or null when undeclared.
+  ArrowField? fieldForTypeId(int typeId) {
+    final index = typeIds.indexOf(typeId);
+    return index < 0 ? null : fields[index];
+  }
+
+  @override
+  Map<String, Object?> toJson() => {
+    'kind': 'union',
+    'mode': mode.name,
+    'typeIds': typeIds,
+    'fields': fields.map((f) => f.toJson()).toList(),
+  };
+}
+
+/// Calendar interval in the given [unit].
+final class ArrowIntervalType extends ArrowDataType {
+  const ArrowIntervalType(this.unit);
+  final ArrowIntervalUnit unit;
+  @override
+  Map<String, Object?> toJson() => {'kind': 'interval', 'unit': unit.name};
+}
+
+/// Run-end encoded data. [runEndsField] must be a non-nullable int16, int32,
+/// or int64 field. Arrays of this type hold logical per-row values.
+final class ArrowRunEndEncodedType extends ArrowDataType {
+  ArrowRunEndEncodedType(this.runEndsField, this.valuesField) {
+    final type = runEndsField.type;
+    if (type is! ArrowIntegerType ||
+        !type.signed ||
+        type.bitWidth < 16 ||
+        type.bitWidth > 64 ||
+        runEndsField.nullable) {
+      throw ArgumentError.value(
+        runEndsField,
+        'runEndsField',
+        'must be a non-nullable int16, int32, or int64 field',
+      );
+    }
+  }
+  final ArrowField runEndsField;
+  final ArrowField valuesField;
+  @override
+  Map<String, Object?> toJson() => {
+    'kind': 'runEndEncoded',
+    'runEnds': runEndsField.toJson(),
+    'values': valuesField.toJson(),
+  };
+}
+
 bool _deepEquals(Object? a, Object? b) {
   if (a is Map && b is Map) {
     return a.length == b.length &&
@@ -421,4 +724,17 @@ Map<String, Object?> _stringObjectMap(Object? value, String path) {
     result[entry.key as String] = entry.value;
   }
   return result;
+}
+
+Map<String, String> _stringMap(Object? value) {
+  if (value == null) return const {};
+  final map = _stringObjectMap(value, 'dtype.entriesMetadata');
+  return {
+    for (final MapEntry(:key, :value) in map.entries)
+      key: value is String
+          ? value
+          : throw FormatException(
+              'dtype.entriesMetadata.$key must be a string',
+            ),
+  };
 }
