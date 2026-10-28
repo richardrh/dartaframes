@@ -1,5 +1,7 @@
 import 'dart:typed_data';
 
+import 'type.dart' show ArrowIntervalUnit;
+
 sealed class ArrowValue {
   const ArrowValue();
 }
@@ -41,12 +43,11 @@ final class ArrowFloatingValue extends ArrowValue {
     return ArrowFloatingValue(32, data.getUint32(0, Endian.little));
   }
   factory ArrowFloatingValue.float64(double value) {
+    // Read as two uint32 halves: getInt64 is unavailable on the web.
     final data = ByteData(8)..setFloat64(0, value, Endian.little);
-    final rawBits = data.getInt64(0, Endian.little);
-    return ArrowFloatingValue(
-      64,
-      rawBits < 0 ? BigInt.from(rawBits) + (BigInt.one << 64) : rawBits,
-    );
+    final low = BigInt.from(data.getUint32(0, Endian.little));
+    final high = BigInt.from(data.getUint32(4, Endian.little));
+    return ArrowFloatingValue(64, (high << 32) | low);
   }
   final int bitWidth;
   final BigInt bits;
@@ -154,6 +155,99 @@ final class ArrowExtensionValue extends ArrowValue {
       other is ArrowExtensionValue && storage == other.storage;
   @override
   int get hashCode => storage.hashCode;
+}
+
+/// One key/value pair of an [ArrowMapValue]. Keys are never null.
+final class ArrowMapEntry {
+  const ArrowMapEntry(this.key, this.value);
+  final ArrowValue key;
+  final ArrowValue? value;
+  @override
+  bool operator ==(Object other) =>
+      other is ArrowMapEntry && key == other.key && value == other.value;
+  @override
+  int get hashCode => Object.hash(key, value);
+}
+
+/// An Arrow map row. Entry order is preserved and duplicate keys are retained,
+/// matching the physical list-of-entries layout.
+final class ArrowMapValue extends ArrowValue {
+  ArrowMapValue(List<ArrowMapEntry> entries)
+    : entries = List.unmodifiable(entries);
+  final List<ArrowMapEntry> entries;
+  @override
+  bool operator ==(Object other) =>
+      other is ArrowMapValue && _listEquals(entries, other.entries);
+  @override
+  int get hashCode => Object.hashAll(entries);
+}
+
+/// A union row tagged with its child [typeId]. A null [value] is a null in the
+/// selected child (unions have no top-level validity bitmap).
+final class ArrowUnionValue extends ArrowValue {
+  const ArrowUnionValue(this.typeId, this.value);
+  final int typeId;
+  final ArrowValue? value;
+  @override
+  bool operator ==(Object other) =>
+      other is ArrowUnionValue &&
+      typeId == other.typeId &&
+      value == other.value;
+  @override
+  int get hashCode => Object.hash(typeId, value);
+}
+
+/// An Arrow interval. Only the components relevant to [unit] are non-zero:
+/// yearMonth uses [months]; dayTime uses [days] and [milliseconds];
+/// monthDayNano uses [months], [days], and [nanoseconds].
+final class ArrowIntervalValue extends ArrowValue {
+  ArrowIntervalValue.yearMonth(this.months)
+    : unit = ArrowIntervalUnit.yearMonth,
+      days = 0,
+      milliseconds = 0,
+      nanoseconds = BigInt.zero {
+    _checkInt32(months, 'months');
+  }
+  ArrowIntervalValue.dayTime(this.days, this.milliseconds)
+    : unit = ArrowIntervalUnit.dayTime,
+      months = 0,
+      nanoseconds = BigInt.zero {
+    _checkInt32(days, 'days');
+    _checkInt32(milliseconds, 'milliseconds');
+  }
+  ArrowIntervalValue.monthDayNano(this.months, this.days, Object nanoseconds)
+    : unit = ArrowIntervalUnit.monthDayNano,
+      milliseconds = 0,
+      nanoseconds = _bigInt(nanoseconds) {
+    _checkInt32(months, 'months');
+    _checkInt32(days, 'days');
+    if (this.nanoseconds < -(BigInt.one << 63) ||
+        this.nanoseconds >= BigInt.one << 63) {
+      throw RangeError('nanoseconds does not fit int64');
+    }
+  }
+  final ArrowIntervalUnit unit;
+  final int months;
+  final int days;
+  final int milliseconds;
+  final BigInt nanoseconds;
+  @override
+  bool operator ==(Object other) =>
+      other is ArrowIntervalValue &&
+      unit == other.unit &&
+      months == other.months &&
+      days == other.days &&
+      milliseconds == other.milliseconds &&
+      nanoseconds == other.nanoseconds;
+  @override
+  int get hashCode =>
+      Object.hash(unit, months, days, milliseconds, nanoseconds);
+}
+
+void _checkInt32(int value, String name) {
+  if (value < -0x80000000 || value > 0x7fffffff) {
+    throw RangeError.range(value, -0x80000000, 0x7fffffff, name);
+  }
 }
 
 BigInt _bigInt(Object value) {

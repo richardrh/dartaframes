@@ -7,6 +7,21 @@ final class RecordBatchCodec {
   static const OwnedBatchJsonCodec _codec = OwnedBatchJsonCodec();
 
   Map<String, Object?> encode(RecordBatch batch) {
+    if (batch.columns.any((column) => column.nestedDictionaries.isNotEmpty)) {
+      throw UnsupportedError(
+        'Nested dictionaries are supported by standalone Arrow IPC, '
+        'not the Polars copied-batch protocol',
+      );
+    }
+    final names = <String>{};
+    for (final field in batch.schema.fields) {
+      if (field.name.isEmpty || !names.add(field.name)) {
+        throw UnsupportedError(
+          'Polars copied batches require unique non-empty column names',
+        );
+      }
+      _validateNativeType(field.type.toJson(), field.name);
+    }
     final encoded = _codec.toJson(batch);
     final columns = (encoded['columns'] as List)
         .map((raw) {
@@ -25,6 +40,81 @@ final class RecordBatchCodec {
         })
         .toList(growable: false);
     return {'length': batch.length, 'columns': columns};
+  }
+
+  // Standard Arrow support must not silently expand the native JSON protocol.
+  static void _validateNativeType(Map<String, Object?> type, String path) {
+    const supported = {
+      'null',
+      'boolean',
+      'int8',
+      'int16',
+      'int32',
+      'int64',
+      'int128',
+      'uint8',
+      'uint16',
+      'uint32',
+      'uint64',
+      'uint128',
+      'float16',
+      'float32',
+      'float64',
+      'decimal',
+      'string',
+      'largeString',
+      'binary',
+      'largeBinary',
+      'date',
+      'datetime',
+      'duration',
+      'time',
+      'list',
+      'fixedSizeList',
+      'struct',
+      'dictionary',
+      'extension',
+    };
+    if (!supported.contains(type['kind'])) {
+      throw UnsupportedError(
+        'Arrow type ${type['kind']} at $path is not supported by the '
+        'Polars copied-batch protocol; standalone Arrow support is separate.',
+      );
+    }
+    if (type['kind'] == 'decimal' &&
+        ((type['bitWidth'] ?? 128) != 128 ||
+            (type['scale'] as int) < 0 ||
+            (type['scale'] as int) > (type['precision'] as int))) {
+      throw UnsupportedError(
+        'Polars copied batches require decimal128 with scale between zero and precision at $path',
+      );
+    }
+    for (final key in ['storageType', 'valueType', 'indexType']) {
+      final child = type[key];
+      if (child is Map) {
+        _validateNativeType(child.cast<String, Object?>(), '$path.$key');
+      }
+    }
+    final field = type['field'];
+    if (field is Map) {
+      _validateNativeType((field['dtype'] as Map).cast(), '$path.item');
+    }
+    final fields = type['fields'];
+    if (fields is List) {
+      final names = <Object?>{};
+      for (final raw in fields) {
+        final field = raw as Map;
+        if (field['name'] == '' || !names.add(field['name'])) {
+          throw UnsupportedError(
+            'Polars copied structs require unique non-empty field names at $path',
+          );
+        }
+        _validateNativeType(
+          (field['dtype'] as Map).cast(),
+          '$path.${field['name']}',
+        );
+      }
+    }
   }
 
   static Map<String, Object?> _polarsDType(

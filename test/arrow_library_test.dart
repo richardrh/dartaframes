@@ -57,7 +57,8 @@ void main() {
       expect(() => ArrowIntegerType(24), throwsArgumentError);
       expect(() => ArrowFloatingType(128), throwsArgumentError);
       expect(() => ArrowDecimalType(0, 0), throwsRangeError);
-      expect(() => ArrowDecimalType(3, 4), throwsRangeError);
+      // Arrow allows scale > precision and negative scales.
+      expect(ArrowDecimalType(3, 4).scale, 4);
       expect(
         () =>
             ArrowFixedSizeListType(ArrowField('x', const ArrowNullType()), -1),
