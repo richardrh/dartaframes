@@ -35,6 +35,7 @@ part 'sql.dart';
 /// object belongs exclusively to this runtime, even when two runtimes were
 /// constructed from the same [ProtocolClient].
 final class Polars {
+  /// Wraps an existing [ProtocolClient] as a new, independent runtime.
   Polars.fromClient(this._client);
 
   /// Uses the native library supplied by this package's native-assets hook.
@@ -44,8 +45,13 @@ final class Polars {
   /// [process] for an explicitly managed development library.
   factory Polars.native() => Polars.fromClient(NativeAssetProtocolClient());
 
+  /// Loads the native library at [path] with `DynamicLibrary.open`.
+  ///
+  /// Intended for source development against a locally built library.
   factory Polars.open(String path) =>
       Polars.fromClient(NativeProtocolClient.open(path));
+
+  /// Uses native symbols already linked into the current process.
   factory Polars.process() => Polars.fromClient(NativeProtocolClient.process());
 
   final ProtocolClient _client;
@@ -57,23 +63,38 @@ final class Polars {
   SqlContext sqlContext() =>
       _adoptSqlContext(_client.invokeSync('sqlContextNew'));
 
+  /// Synchronously reports the protocol and feature capabilities of the
+  /// loaded native library.
   NativeHelloCapabilities nativeCapabilitiesSync() =>
       _client.nativeCapabilitiesSync();
+
+  /// Reports the protocol and feature capabilities of the loaded native
+  /// library.
   Future<NativeHelloCapabilities> nativeCapabilities() =>
       _client.nativeCapabilities();
 
+  /// Synchronously reads diagnostic information from the native runtime.
   RuntimeDiagnostics runtimeDiagnosticsSync() =>
       RuntimeDiagnostics.fromResponse(_client.invokeSync('runtimeDiagnostics'));
+
+  /// Reads diagnostic information from the native runtime.
   Future<RuntimeDiagnostics> runtimeDiagnostics() async =>
       RuntimeDiagnostics.fromResponse(
         await _client.invoke('runtimeDiagnostics'),
       );
 
+  /// Creates an expression that references the column called [name].
+  ///
+  /// Throws an [ArgumentError] when [name] is empty.
   Expr col(String name) {
     _validateName(name, 'name');
     return _adoptExpr(_client.invokeSync('exprColumn', {'name': name}));
   }
 
+  /// Creates a literal expression from a Dart [value].
+  ///
+  /// Pass [dtype] to choose the Polars type explicitly instead of inferring
+  /// it from the Dart value.
   Expr lit(Object? value, [DType? dtype]) {
     final scalar = _scalar(value, dtype);
     return _adoptExpr(
@@ -81,12 +102,22 @@ final class Polars {
     );
   }
 
+  /// Creates an expression that evaluates to the number of rows.
   Expr len() => _adoptExpr(_client.invokeSync('exprLen'));
+
+  /// Starts a conditional `when(...).then(...).otherwise(...)` expression
+  /// whose first branch applies where [predicate] is true.
   When when(Expr predicate) {
     _requireExpr(predicate);
     return When._(this, predicate);
   }
 
+  /// Lazily scans the CSV file at [path].
+  ///
+  /// Query execution is deferred until the returned [LazyFrame] is
+  /// collected; schema discovery may inspect the source.
+  /// [separator] must be a single byte. [skipRows] and [nRows] must be
+  /// non-negative when given. Set [tryParseDates] to infer date columns.
   LazyFrame scanCsv(
     String path, {
     bool hasHeader = true,
@@ -161,6 +192,10 @@ final class Polars {
     }
   }
 
+  /// Lazily scans the Parquet file at [path].
+  ///
+  /// [nRows] limits the number of rows read. [parallel] lets Polars read
+  /// row groups in parallel.
   LazyFrame scanParquet(String path, {int? nRows, bool parallel = true}) {
     _validatePath(path);
     _validateUnsigned(nRows, 'nRows');
@@ -173,6 +208,12 @@ final class Polars {
     );
   }
 
+  /// Concatenates lazy [frames] owned by this runtime into one plan.
+  ///
+  /// [how] is one of `vertical`, `verticalRelaxed`, `diagonal`,
+  /// `diagonalRelaxed`, or `horizontal`. [rechunk] is not supported with
+  /// horizontal concatenation. Throws an [ArgumentError] when [frames] is
+  /// empty or an option is invalid.
   LazyFrame concat(
     Iterable<LazyFrame> frames, {
     String how = 'vertical',
@@ -216,6 +257,7 @@ final class Polars {
     }
   }
 
+  /// Synchronously imports an owned Arrow [batch] as an eager [DataFrame].
   DataFrame fromRecordBatchSync(
     RecordBatch batch, [
     RecordBatchCodec codec = const RecordBatchCodec(),
@@ -223,6 +265,7 @@ final class Polars {
     _client.invokeSync('frameImport', {'batch': codec.encode(batch)}),
   );
 
+  /// Imports an owned Arrow [batch] as an eager [DataFrame].
   Future<DataFrame> fromRecordBatch(
     RecordBatch batch, [
     RecordBatchCodec codec = const RecordBatchCodec(),
@@ -230,6 +273,8 @@ final class Polars {
     await _client.invoke('frameImport', {'batch': codec.encode(batch)}),
   );
 
+  /// Synchronously imports an owned Arrow [array] as a [Series] called
+  /// [name].
   Series fromArrowArraySync(
     String name,
     ArrowArray array, [
@@ -247,6 +292,7 @@ final class Polars {
     );
   }
 
+  /// Imports an owned Arrow [array] as a [Series] called [name].
   Future<Series> fromArrowArray(
     String name,
     ArrowArray array, [
@@ -280,12 +326,23 @@ final class Polars {
   /// Allocates an empty owned C Stream struct for an external producer.
   ArrowCStream allocateArrowCStream() => _arrowC.allocateStream();
 
+  /// Imports Arrow C Data Interface structs as a [DataFrame].
+  ///
+  /// Import consumes the payload in [data]. Close [data] afterwards to free
+  /// the empty structs.
   DataFrame fromArrowCData(ArrowCData data) =>
       _adoptFrame({'handle': _arrowC.importFrame(data)});
 
+  /// Imports Arrow C Data Interface structs as a [Series].
+  ///
+  /// Import consumes the payload in [data].
   Series seriesFromArrowCData(ArrowCData data) =>
       _adoptSeries({'handle': _arrowC.importSeries(data)});
 
+  /// Imports an Arrow C Stream Interface [stream] as a [DataFrame].
+  ///
+  /// Import stops with an error rather than exceeding [maxBatches] batches or
+  /// [maxRows] rows. Both limits must be positive.
   DataFrame fromArrowCStream(
     ArrowCStream stream, {
     required int maxBatches,
@@ -306,8 +363,9 @@ final class Polars {
       return value;
     }
     if (value == null) {
-      if (dtype == null)
+      if (dtype == null) {
         throw ArgumentError('A null literal requires a dtype.');
+      }
       return Scalar.nullValue(dtype);
     }
     if (dtype != null) return Scalar.typed(dtype, value);
@@ -441,8 +499,9 @@ int? _optionalResponseHandle(Map<String, Object?> response, String field) {
 }
 
 void _validateName(String value, String argument) {
-  if (value.isEmpty)
+  if (value.isEmpty) {
     throw ArgumentError.value(value, argument, 'must not be empty');
+  }
 }
 
 void _validatePath(String value) => _validateName(value, 'path');
@@ -464,11 +523,13 @@ void _validateSeparator(String value) {
 }
 
 void _validateUnsigned(int? value, String name) {
-  if (value != null && value < 0)
+  if (value != null && value < 0) {
     throw RangeError.value(value, name, 'must be unsigned');
+  }
 }
 
 void _validatePositive(int? value, String name) {
-  if (value != null && value <= 0)
+  if (value != null && value <= 0) {
     throw RangeError.value(value, name, 'must be positive');
+  }
 }

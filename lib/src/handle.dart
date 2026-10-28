@@ -2,8 +2,9 @@ part of 'polars.dart';
 
 final class _HandleOwner implements Finalizable {
   _HandleOwner(this.runtime, this.handle) {
-    if (handle <= 0)
+    if (handle <= 0) {
       throw ArgumentError.value(handle, 'handle', 'must be positive');
+    }
   }
 
   final Polars runtime;

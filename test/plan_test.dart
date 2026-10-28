@@ -84,7 +84,9 @@ void main() {
     // The source remains reusable after all branches.
     final again = input.isNull;
     expect(fake.requests.last['input'], '1');
-    for (final value in [again, branch, cast, alias, input]) value.close();
+    for (final value in [again, branch, cast, alias, input]) {
+      value.close();
+    }
   });
 
   test('all expression operation IDs and options map exactly', () {

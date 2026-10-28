@@ -24,8 +24,9 @@ final class ArrowArray {
     }
     if (type case final ArrowDictionaryType dictionaryType) {
       final dictionary = this.dictionary;
-      if (dictionary == null)
+      if (dictionary == null) {
         throw ArgumentError('Dictionary array requires dictionary values');
+      }
       if (dictionary.type != dictionaryType.valueType) {
         throw ArgumentError(
           'Dictionary value datatype does not match dictionary datatype',
@@ -96,8 +97,9 @@ void validateArrowValue(
         );
       }
     case final ArrowFloatingType floating:
-      if (value is! ArrowFloatingValue || value.bitWidth != floating.bitWidth)
+      if (value is! ArrowFloatingValue || value.bitWidth != floating.bitWidth) {
         mismatch();
+      }
     case final ArrowDecimalType decimal:
       if (value is! ArrowDecimalValue) mismatch();
       final digits = value.unscaled.abs().toString().length;
@@ -167,8 +169,9 @@ void validateArrowValue(
           );
         }
         if (actual.value == null) {
-          if (!expected.nullable)
+          if (!expected.nullable) {
             throw ArgumentError('$path.${expected.name} is not nullable');
+          }
         } else {
           validateArrowValue(
             expected.type,

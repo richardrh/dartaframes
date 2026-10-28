@@ -1,0 +1,2 @@
+# Match the core lint rules used by pub.dev package analysis.
+include: package:lints/core.yaml

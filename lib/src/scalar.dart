@@ -69,8 +69,9 @@ final class Scalar {
       Scalar._(const BooleanType(), {'value': value});
   factory Scalar.integer(BigInt value, DType dtype) {
     final bounds = _integerBounds[dtype.kind];
-    if (bounds == null)
+    if (bounds == null) {
       throw ArgumentError.value(dtype, 'dtype', 'not an integer');
+    }
     if (value < bounds.$1 || value > bounds.$2) {
       throw ArgumentError.value(
         value,

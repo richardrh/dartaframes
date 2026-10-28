@@ -416,8 +416,9 @@ Future<int> run(List<String> arguments) async {
     final scores = <FunctionScore>[];
     for (final rootName in args.multiOption('source')) {
       final root = Directory(rootName);
-      if (!root.existsSync())
+      if (!root.existsSync()) {
         throw FileSystemException('Source directory does not exist', rootName);
+      }
       final files =
           root
               .listSync(recursive: true, followLinks: false)
