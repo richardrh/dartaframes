@@ -157,10 +157,10 @@ packages:
     dependency: "direct main"
     description:
       name: libcompress
-      sha256: ec527b228ddcfa14faaddf41263e880eed0159f095743203562fea947107c2f5
+      sha256: "5029b3c16e96ef3805deb9acc82a49e89afddbb54791d038394d5877692711e6"
       url: "https://pub.dev"
     source: hosted
-    version: "1.2.1"
+    version: "2.0.0"
   lints:
     dependency: "direct dev"
     description:
